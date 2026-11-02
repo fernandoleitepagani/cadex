@@ -35,9 +35,10 @@
 - spaces.json guarda os spaces e quantos terminais cada um tinha; ao abrir, o app recria
   as abas de terminal (documentos não são restaurados).
 - Doze temas embutidos (Caffeine, Caffeine Light, Cadex, Solarized, Nord, Dracula,
-  Gruvbox, Tokyo Night, One Dark, Catppuccin). O Caffeine é o padrão e traz a paleta da
-  interface do macOS Cadex (chrome `#222222`, painel `#111111`, destaque `#ffe0c2`);
-  os demais derivam a interface das cores do terminal. A paleta do tema vale para a
+  Gruvbox, Tokyo Night, One Dark, Catppuccin). O Caffeine é o padrão: a interface mantém a estrutura do macOS Cadex
+  (chrome `#222226`, barra lateral `#2e2e32`, painel `#1d1d20`, destaque `#ffe0c2`) e
+  o terminal usa a paleta noturna padrão do GNOME Console (fundo `#1d1d20`, texto
+  branco); os demais temas derivam a interface das cores do terminal. A paleta do tema vale para a
   interface, o terminal, o editor e a prévia WebKit; o claro/escuro é forçado pelo
   `AdwStyleManager`.
 - `features/terminal/terminal.zig`: a porta de entrada do núcleo (sessão, frame, teclas,

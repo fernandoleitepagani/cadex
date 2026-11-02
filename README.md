@@ -162,8 +162,9 @@ do sistema e não embutem o WebKit:
 
 A interface Linux é libadwaita/GNOME: barra superior integrada com as abas no centro, barra
 lateral de navegação, painéis arredondados, barra de status, preferências, páginas de estado e
-toasts. O tema padrão é o **Caffeine**, com as cores do Cadex do macOS (chrome `#222222`,
-painel `#111111`, destaque `#ffe0c2`); os outros temas também colorem a interface. Sem
+toasts. O tema padrão é o **Caffeine**, com a estrutura do Cadex do macOS e a paleta do terminal
+do GNOME Console (chrome `#222226`, barra lateral `#2e2e32`, terminal `#1d1d20`,
+destaque `#ffe0c2`); os outros temas também colorem a interface. Sem
 `WAYLAND_DISPLAY` o app sai com uma mensagem clara; X11 e XWayland não são suportados. O
 WebKitGTK é opcional na compilação: sem ele, a prévia do Markdown usa o renderizador Pango e o resto
 continua funcionando.

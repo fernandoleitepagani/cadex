@@ -34,8 +34,10 @@ const VERTICAL: c_int = 1;
 const Interface = struct {
     /// Title bar, the gaps between panels and the status bar.
     chrome: u32,
-    /// The rounded sidebar and content panels.
+    /// The rounded content panel.
     panel: u32,
+    /// The rounded sidebar panel (slightly lighter in dark themes, like GNOME).
+    sidebar: u32,
     panel_border: u32,
     tab_active: u32,
     field: u32,
@@ -61,17 +63,20 @@ const themes = [_]Theme{
     .{
         .name = "Caffeine",
         .dark = true,
-        .background = 0x111111,
-        .foreground = 0xeeeeee,
-        .cursor = 0xffe0c2,
-        .panel = 0x111111,
-        .ansi = .{ 0x2c2c2c, 0xe54d2e, 0x87ba88, 0xffe0c1, 0x84aee3, 0xc897ca, 0x5dbcc1, 0xc6c6c6, 0xb4b4b4, 0xfe6545, 0x9dd19e, 0xfdebd9, 0x9ac4fb, 0xdfade1, 0x74d3d8, 0xeeeeee },
+        // The terminal uses the GNOME Console night palette, so the tab blends
+        // with the console GNOME users already have.
+        .background = 0x1d1d20,
+        .foreground = 0xffffff,
+        .cursor = 0xffffff,
+        .panel = 0x1d1d20,
+        .ansi = .{ 0x241f31, 0xc01c28, 0x2ec27e, 0xf5c211, 0x1e78e4, 0x9841bb, 0x0ab9dc, 0xc0bfbc, 0x5e5c64, 0xed333b, 0x57e389, 0xf8e45c, 0x51a1ff, 0xc061cb, 0x4fd2fd, 0xf6f5f4 },
         .interface = .{
-            .chrome = 0x222222,
-            .panel = 0x111111,
-            .panel_border = 0x201e18,
+            .chrome = 0x222226,
+            .panel = 0x1d1d20,
+            .sidebar = 0x2e2e32,
+            .panel_border = 0x2e2e32,
             .tab_active = 0x534c45,
-            .field = 0x2e2e2e,
+            .field = 0x2e2e32,
             .text = 0xeeeeee,
             .secondary_text = 0xb4b4b4,
             .accent = 0xffe0c2,
@@ -80,14 +85,15 @@ const themes = [_]Theme{
     .{
         .name = "Caffeine Light",
         .dark = false,
-        .background = 0xf9f9f9,
-        .foreground = 0x202020,
-        .cursor = 0x644a40,
-        .panel = 0xf9f9f9,
-        .ansi = .{ 0x202020, 0xe54d2e, 0x467748, 0xa48d6e, 0x446b9c, 0x835685, 0x1b777b, 0xc3c3c3, 0x646464, 0xcc3412, 0x326335, 0x8e785a, 0x315786, 0x6e4270, 0x0d6165, 0xe3e3e3 },
+        .background = 0xffffff,
+        .foreground = 0x000000,
+        .cursor = 0x000000,
+        .panel = 0xffffff,
+        .ansi = .{ 0x241f31, 0xc01c28, 0x2ec27e, 0xf5c211, 0x1e78e4, 0x9841bb, 0x0ab9dc, 0xc0bfbc, 0x5e5c64, 0xed333b, 0x57e389, 0xf8e45c, 0x51a1ff, 0xc061cb, 0x4fd2fd, 0xf6f5f4 },
         .interface = .{
-            .chrome = 0xefefef,
-            .panel = 0xf9f9f9,
+            .chrome = 0xf6f5f4,
+            .panel = 0xffffff,
+            .sidebar = 0xebebed,
             .panel_border = 0xd8d8d8,
             .tab_active = 0xd0cbc8,
             .field = 0xe3e3e3,
@@ -3783,6 +3789,7 @@ fn interfaceColors(theme: Theme) Interface {
         return .{
             .chrome = mixColor(bg, 0x000000, 72),
             .panel = mixColor(bg, 0xffffff, 94),
+            .sidebar = mixColor(bg, fg, 92),
             .panel_border = mixColor(bg, fg, 86),
             .tab_active = mixColor(bg, fg, 74),
             .field = mixColor(bg, fg, 90),
@@ -3794,6 +3801,7 @@ fn interfaceColors(theme: Theme) Interface {
     return .{
         .chrome = mixColor(bg, 0xffffff, 68),
         .panel = bg,
+        .sidebar = mixColor(bg, 0x000000, 96),
         .panel_border = mixColor(bg, fg, 84),
         .tab_active = mixColor(bg, fg, 78),
         .field = mixColor(bg, fg, 92),
@@ -4071,7 +4079,7 @@ fn applyTheme(app: *App) void {
         ui.chrome,       ui.text,   ui.panel,
         ui.text,         ui.chrome, ui.text,
         ui.panel_border, ui.panel,  ui.text,
-        ui.panel,        ui.text,   ui.field,
+        ui.sidebar,      ui.text,   ui.field,
         ui.text,         ui.chrome, ui.text,
     });
     appendFormatted(&css, app.gpa, ".cadex-window {{ background-color: #{x:0>6}; color: #{x:0>6}; }}\n" ++
@@ -4085,8 +4093,8 @@ fn applyTheme(app: *App) void {
         ".cadex-tabbar tab:hover {{ background-color: #{x:0>6}; color: #{x:0>6}; }}\n" ++
         ".cadex-tabbar tab:checked, .cadex-tabbar tab:selected {{ background-color: #{x:0>6}; color: #{x:0>6}; }}\n" ++
         ".cadex-tabbar expander {{ color: #{x:0>6}; }}\n" ++
-        ".cadex-sidebar-panel {{ background-color: #{x:0>6}; border: 1px solid #{x:0>6}; border-radius: 10px; }}\n" ++
-        ".cadex-content-panel {{ background-color: #{x:0>6}; border: 1px solid #{x:0>6}; border-radius: 10px; }}\n" ++
+        ".cadex-sidebar-panel {{ background-color: #{x:0>6}; border-radius: 10px; }}\n" ++
+        ".cadex-content-panel {{ background-color: #{x:0>6}; border-radius: 10px; }}\n" ++
         ".cadex-status {{ background-color: #{x:0>6}; color: #{x:0>6}; min-height: 24px; padding: 1px 10px; border-top: 1px solid #{x:0>6}; }}\n" ++
         ".cadex-status label {{ font-size: 11px; color: #{x:0>6}; }}\n" ++
         ".cadex-status .cadex-status-strong {{ color: #{x:0>6}; }}\n" ++
@@ -4097,8 +4105,7 @@ fn applyTheme(app: *App) void {
         ui.secondary_text, ui.field,
         ui.text,           ui.tab_active,
         ui.text,           ui.secondary_text,
-        ui.panel,          ui.panel_border,
-        ui.panel,          ui.panel_border,
+        ui.sidebar,        ui.panel,
         ui.chrome,         ui.secondary_text,
         ui.panel_border,   ui.secondary_text,
         ui.text,           ui.chrome,
