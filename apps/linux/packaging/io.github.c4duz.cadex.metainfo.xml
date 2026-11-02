@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.c4duz.cadex</id>
+  <name>Cadex</name>
+  <summary>Terminal, editor, git and notes in one Wayland window</summary>
+  <description>
+    <p>Cadex is a terminal-centric development workspace: terminal tabs and splits, an
+    editor with tree-sitter highlights, Markdown notes with a live preview, git status and
+    history, search across the workspace, SSH hosts and Claude session history.</p>
+    <p>The Linux app is a preview and runs on Wayland with GTK4.</p>
+  </description>
+  <launchable type="desktop-id">cadex.desktop</launchable>
+  <url type="homepage">https://github.com/c4duZ/cadex</url>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-11-02"/>
+  </releases>
+  <provides>
+    <binary>cadex</binary>
+  </provides>
+</component>

@@ -18,9 +18,19 @@ pub fn build(b: *std.Build) void {
     const lib_names = pkgFlags(b, &.{ "pkg-config", "--libs-only-l", "gtk4" }, "-l");
 
     // The C shim: GTK4, GDK, Pango and GLib, compiled by the C compiler.
+    // WebKitGTK is optional: without its development package the preview page
+    // explains how to enable it instead of failing the build.
+    var webkit_code: u8 = 0;
+    _ = b.runAllowFail(&.{ "pkg-config", "--exists", "webkitgtk-6.0" }, &webkit_code, .ignore) catch "";
+    const has_webkit = webkit_code == 0;
     const shim_module = b.createModule(.{ .target = target, .optimize = optimize, .link_libc = true });
     shim_module.addCSourceFile(.{ .file = b.path("shared/system/gtk_shim.c"), .flags = &.{"-std=c11"} });
     for (include_paths) |path| shim_module.addIncludePath(.{ .cwd_relative = path });
+    if (has_webkit) {
+        shim_module.addCMacro("CADEX_HAS_WEBKIT", "1");
+        const webkit_includes = pkgFlags(b, &.{ "pkg-config", "--cflags-only-I", "webkitgtk-6.0" }, "-I");
+        for (webkit_includes) |path| shim_module.addIncludePath(.{ .cwd_relative = path });
+    }
     const shim = b.addLibrary(.{ .name = "cadex-gtk-shim", .linkage = .static, .root_module = shim_module });
 
     const system = b.createModule(.{
@@ -73,6 +83,12 @@ pub fn build(b: *std.Build) void {
     root.addLibraryPath(.{ .cwd_relative = std.mem.trimEnd(u8, system_libdir, "\n") });
     for (lib_paths) |path| root.addLibraryPath(.{ .cwd_relative = path });
     for (lib_names) |name| root.linkSystemLibrary(name, .{});
+    if (has_webkit) {
+        const webkit_lib_paths = pkgFlags(b, &.{ "pkg-config", "--libs-only-L", "webkitgtk-6.0" }, "-L");
+        const webkit_lib_names = pkgFlags(b, &.{ "pkg-config", "--libs-only-l", "webkitgtk-6.0" }, "-l");
+        for (webkit_lib_paths) |path| root.addLibraryPath(.{ .cwd_relative = path });
+        for (webkit_lib_names) |name| root.linkSystemLibrary(name, .{});
+    }
     root.linkLibrary(shim);
 
     const exe = b.addExecutable(.{ .name = "cadex", .root_module = root });

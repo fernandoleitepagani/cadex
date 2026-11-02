@@ -144,6 +144,7 @@ void *cadex_window_new_dialog(void *parent, const char *title, int width, int he
 void cadex_window_hide_on_close(void *window);
 void cadex_window_hide(void *window);
 void cadex_widget_set_size(void *widget, int width, int height);
+void cadex_widget_set_margins(void *widget, int start, int end, int top, int bottom);
 void cadex_widget_add_class(void *widget, const char *name);
 void cadex_css_apply(const char *css);
 void cadex_set_dark(int dark);
@@ -177,5 +178,20 @@ void cadex_widget_set_valign(void *widget, int align);
 void cadex_widget_set_halign(void *widget, int align);
 void cadex_widget_set_sensitive(void *widget, int sensitive);
 void cadex_window_on_key(void *window, cadex_key_fn fn, void *user);
+
+/* ---- Previews and integrations (Run 5) -------------------------------- */
+
+int cadex_webkit_available(void);
+void *cadex_webview_new(void);
+void cadex_webview_load_html(void *view, const char *html, const char *base_uri);
+void cadex_webview_load_uri(void *view, const char *uri);
+void *cadex_picture_new(const char *path);
+void *cadex_video_new(const char *path);
+int cadex_inhibit_start(const char *reason);
+void cadex_inhibit_stop(int pid);
+void cadex_notify(const char *title, const char *body);
+char *cadex_list_dir(const char *path);
+int cadex_path_info(const char *path, int *is_dir, long long *mtime, long long *size);
+int cadex_window_is_active(void *window);
 
 #endif

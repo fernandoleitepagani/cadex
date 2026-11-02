@@ -1,0 +1,63 @@
+name: linux app
+
+on: [push, pull_request]
+
+jobs:
+  app:
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["ubuntu:24.04", "fedora:44"]
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: dependencies
+        run: |
+          if command -v apt-get >/dev/null; then
+            apt-get update
+            apt-get install -y curl xz-utils ca-certificates gcc libc6-dev pkg-config \
+              libgtk-4-dev libwebkitgtk-6.0-dev libgstreamer1.0-dev \
+              libgstreamer-plugins-base1.0-dev libgdk-pixbuf-2.0-dev \
+              libharfbuzz-dev libfreetype-dev libfontconfig-dev
+          else
+            dnf install -y curl xz tar gcc pkgconf-pkg-config gtk4-devel \
+              webkitgtk6.0-devel gstreamer1-devel gstreamer1-plugins-base-devel \
+              gdk-pixbuf2-devel harfbuzz-devel freetype-devel fontconfig-devel
+          fi
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - name: core
+        run: make linux-core
+      - name: app tests
+        run: make linux-test
+      - name: app build
+        run: make linux-app
+      - name: headless smoke
+        run: |
+          if command -v apt-get >/dev/null; then
+            apt-get install -y sway grim wtype
+          else
+            dnf install -y sway grim wtype
+          fi
+          export XDG_RUNTIME_DIR=$PWD/.wayland
+          mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+          printf 'output HEADLESS-1 resolution 1200x800\n' > .sway.conf
+          WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=pixman \
+            sway -c .sway.conf >/tmp/sway.log 2>&1 &
+          sleep 3
+          export WAYLAND_DISPLAY=$(basename "$(ls "$XDG_RUNTIME_DIR"/wayland-* | head -1)")
+          ./apps/linux/zig-out/bin/cadex "$PWD" >/tmp/cadex.log 2>&1 &
+          sleep 5
+          grim /tmp/linux-smoke.png
+          test -s /tmp/linux-smoke.png
+      - name: packages
+        run: |
+          CADEX_OUT=$PWD/apps/linux/dist make linux-package
+          ls -lh apps/linux/dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ strategy.job-index }}
+          path: apps/linux/dist/Cadex-linux-x86_64.*
+          if-no-files-found: warn

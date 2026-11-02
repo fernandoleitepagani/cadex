@@ -145,7 +145,9 @@ const Doc = struct {
     alive: bool = true,
     preview_scroll: ?*anyopaque = null,
     preview_label: ?*anyopaque = null,
+    preview_view: ?*anyopaque = null,
     preview_visible: bool = true,
+    media: bool = false,
     save_button: ?*anyopaque = null,
     preview_button: ?*anyopaque = null,
     language_buf: [48]u8 = undefined,
@@ -175,6 +177,12 @@ const SearchHit = struct {
     path: []u8,
     line: u32,
     text: []u8,
+};
+
+const AgentSession = struct {
+    path: [:0]u8,
+    label: []u8,
+    mtime: i64,
 };
 
 const App = struct {
@@ -254,6 +262,16 @@ const App = struct {
     history_has_more: bool = true,
     history_loaded: bool = false,
 
+    // Agents, SSH, power and notifications (Run 5).
+    agents_list: *anyopaque = undefined,
+    agents_status: *anyopaque = undefined,
+    agent_sessions: std.ArrayList(AgentSession) = .empty,
+    ssh_list: *anyopaque = undefined,
+    ssh_status: *anyopaque = undefined,
+    ssh_hosts: std.ArrayList([]u8) = .empty,
+    power_button: ?*anyopaque = null,
+    power_pid: i32 = 0,
+
     // New file/folder prompt.
     prompt_window: ?*anyopaque = null,
     prompt_entry: ?*anyopaque = null,
@@ -289,6 +307,10 @@ const commands = [_]Command{
     .{ .id = "sidebar.search", .title = "Search Files and Content", .keywords = "sidebar search find files content", .shortcut = "Ctrl+Shift+P", .run = cmdSidebarSearch },
     .{ .id = "sidebar.git", .title = "Source Control", .keywords = "sidebar git source control", .shortcut = "Ctrl+Shift+G", .run = cmdSidebarGit },
     .{ .id = "sidebar.history", .title = "Git History", .keywords = "sidebar history git log", .shortcut = "Ctrl+Shift+H", .run = cmdSidebarHistory },
+    .{ .id = "sidebar.agents", .title = "Agents", .keywords = "agents claude sessions", .shortcut = "", .run = cmdSidebarAgents },
+    .{ .id = "sidebar.ssh", .title = "SSH Hosts", .keywords = "ssh hosts remote", .shortcut = "", .run = cmdSidebarSsh },
+    .{ .id = "power.toggle", .title = "Keep Awake", .keywords = "power inhibit sleep awake", .shortcut = "Ctrl+Shift+Alt+P", .run = cmdTogglePower },
+    .{ .id = "app.test-notification", .title = "Test Notification", .keywords = "notification test", .shortcut = "", .run = cmdTestNotification },
     .{ .id = "document.save", .title = "Save Document", .keywords = "save write file", .shortcut = "Ctrl+Shift+S", .run = cmdSaveDocument },
     .{ .id = "document.preview", .title = "Toggle Markdown Preview", .keywords = "preview markdown render", .shortcut = "Ctrl+Shift+M", .run = cmdTogglePreview },
     .{ .id = "explorer.new-file", .title = "New File", .keywords = "explorer file create", .shortcut = "", .run = cmdNewFile },
@@ -405,30 +427,42 @@ fn create(launch: *Launch, gtk_app: *anyopaque) !void {
     c.cadex_header_widget_start(header, header_start);
     app.header_title = c.cadex_header_title(header, "Cadex") orelse return error.GtkFailed;
     const header_end = c.cadex_box_new_h(8) orelse return error.GtkFailed;
+    app.power_button = c.cadex_button_new("Keep Awake", powerClicked, app) orelse return error.GtkFailed;
+    c.cadex_box_append(header_end, app.power_button.?);
     c.cadex_box_append(header_end, c.cadex_button_new("Palette", paletteClicked, app) orelse return error.GtkFailed);
     c.cadex_box_append(header_end, c.cadex_button_new("Settings", settingsClicked, app) orelse return error.GtkFailed);
     c.cadex_header_widget_end(header, header_end);
 
     const main_box = c.cadex_paned_new(HORIZONTAL) orelse return error.GtkFailed;
     app.sidebar = c.cadex_box_new() orelse return error.GtkFailed;
-    c.cadex_widget_set_size(app.sidebar, 300, -1);
+    c.cadex_widget_set_size(app.sidebar, 320, -1);
     c.cadex_widget_add_class(app.sidebar, "cadex-sidebar");
     var title_buf: [256]u8 = undefined;
     const sidebar_title = c.cadex_label_new(std.fmt.bufPrintZ(&title_buf, "Cadex · {s}", .{std.fs.path.basename(app.root)}) catch "Cadex") orelse return error.GtkFailed;
     c.cadex_widget_add_class(sidebar_title, "cadex-sidebar-title");
+    c.cadex_widget_set_margins(sidebar_title, 8, 8, 4, 2);
     c.cadex_box_append(app.sidebar, sidebar_title);
     const icons = c.cadex_box_new_h(4) orelse return error.GtkFailed;
     c.cadex_box_append(icons, c.cadex_button_new("Files", sidebarFilesClicked, app) orelse return error.GtkFailed);
     c.cadex_box_append(icons, c.cadex_button_new("Search", sidebarSearchClicked, app) orelse return error.GtkFailed);
     c.cadex_box_append(icons, c.cadex_button_new("Git", sidebarGitClicked, app) orelse return error.GtkFailed);
-    c.cadex_box_append(icons, c.cadex_button_new("History", sidebarHistoryClicked, app) orelse return error.GtkFailed);
+    c.cadex_widget_set_margins(icons, 4, 4, 0, 0);
     c.cadex_box_append(app.sidebar, icons);
+    const icons2 = c.cadex_box_new_h(4) orelse return error.GtkFailed;
+    c.cadex_box_append(icons2, c.cadex_button_new("History", sidebarHistoryClicked, app) orelse return error.GtkFailed);
+    c.cadex_box_append(icons2, c.cadex_button_new("Agents", sidebarAgentsClicked, app) orelse return error.GtkFailed);
+    c.cadex_box_append(icons2, c.cadex_button_new("SSH", sidebarSshClicked, app) orelse return error.GtkFailed);
+    c.cadex_widget_set_margins(icons2, 4, 4, 0, 0);
+    c.cadex_box_append(app.sidebar, icons2);
     app.sidebar_stack = c.cadex_stack_new() orelse return error.GtkFailed;
     c.cadex_stack_add(app.sidebar_stack, try buildFilesPage(app), "files");
     c.cadex_stack_add(app.sidebar_stack, try buildSearchPage(app), "search");
     c.cadex_stack_add(app.sidebar_stack, try buildGitPage(app), "git");
     c.cadex_stack_add(app.sidebar_stack, try buildHistoryPage(app), "history");
+    c.cadex_stack_add(app.sidebar_stack, try buildAgentsPage(app), "agents");
+    c.cadex_stack_add(app.sidebar_stack, try buildSshPage(app), "ssh");
     c.cadex_widget_expand(app.sidebar_stack);
+    c.cadex_widget_set_margins(app.sidebar_stack, 6, 6, 0, 4);
     c.cadex_box_append(app.sidebar, app.sidebar_stack);
 
     app.content = c.cadex_box_new() orelse return error.GtkFailed;
@@ -456,7 +490,7 @@ fn create(launch: *Launch, gtk_app: *anyopaque) !void {
 
     c.cadex_paned_set_start(main_box, app.sidebar);
     c.cadex_paned_set_end(main_box, app.content);
-    c.cadex_paned_set_position(main_box, 300);
+    c.cadex_paned_set_position(main_box, 320);
     c.cadex_window_child(app.window, main_box);
     c.cadex_window_on_close(app.window, closeCb, app);
     c.cadex_window_on_key(app.window, windowKey, app);
@@ -627,6 +661,242 @@ fn buildHistoryPage(app: *App) !*anyopaque {
     c.cadex_widget_expand(scrolled);
     c.cadex_box_append(page, scrolled);
     return page;
+}
+
+fn buildAgentsPage(app: *App) !*anyopaque {
+    const page = c.cadex_box_new() orelse return error.GtkFailed;
+    c.cadex_widget_add_class(page, "cadex-page");
+    const head = c.cadex_box_new_h(4) orelse return error.GtkFailed;
+    const title = c.cadex_label_new("Claude sessions") orelse return error.GtkFailed;
+    c.cadex_label_ellipsize(title);
+    c.cadex_widget_expand_h(title);
+    c.cadex_box_append(head, title);
+    c.cadex_box_append(head, c.cadex_button_new("Refresh", agentsRefreshClicked, app) orelse return error.GtkFailed);
+    c.cadex_box_append(page, head);
+    app.agents_status = c.cadex_label_new("") orelse return error.GtkFailed;
+    c.cadex_label_ellipsize(app.agents_status);
+    c.cadex_box_append(page, app.agents_status);
+    app.agents_list = c.cadex_listbox_new() orelse return error.GtkFailed;
+    c.cadex_listbox_on_activated(app.agents_list, agentsRowActivated, app);
+    c.cadex_listbox_on_keys(app.agents_list, agentsRowActivated, app);
+    const scrolled = c.cadex_scrolled_new(app.agents_list) orelse return error.GtkFailed;
+    c.cadex_widget_expand(scrolled);
+    c.cadex_box_append(page, scrolled);
+    return page;
+}
+
+fn buildSshPage(app: *App) !*anyopaque {
+    const page = c.cadex_box_new() orelse return error.GtkFailed;
+    c.cadex_widget_add_class(page, "cadex-page");
+    const head = c.cadex_box_new_h(4) orelse return error.GtkFailed;
+    const title = c.cadex_label_new("SSH hosts") orelse return error.GtkFailed;
+    c.cadex_label_ellipsize(title);
+    c.cadex_widget_expand_h(title);
+    c.cadex_box_append(head, title);
+    c.cadex_box_append(head, c.cadex_button_new("Refresh", sshRefreshClicked, app) orelse return error.GtkFailed);
+    c.cadex_box_append(page, head);
+    app.ssh_status = c.cadex_label_new("") orelse return error.GtkFailed;
+    c.cadex_label_ellipsize(app.ssh_status);
+    c.cadex_box_append(page, app.ssh_status);
+    app.ssh_list = c.cadex_listbox_new() orelse return error.GtkFailed;
+    c.cadex_listbox_on_activated(app.ssh_list, sshRowActivated, app);
+    c.cadex_listbox_on_keys(app.ssh_list, sshRowActivated, app);
+    const scrolled = c.cadex_scrolled_new(app.ssh_list) orelse return error.GtkFailed;
+    c.cadex_widget_expand(scrolled);
+    c.cadex_box_append(page, scrolled);
+    return page;
+}
+
+fn clearAgents(app: *App) void {
+    for (app.agent_sessions.items) |session| {
+        app.gpa.free(session.path);
+        app.gpa.free(session.label);
+    }
+    app.agent_sessions.clearRetainingCapacity();
+}
+
+fn refreshAgents(app: *App) void {
+    clearAgents(app);
+    c.cadex_listbox_clear(app.agents_list);
+    const home_z = std.c.getenv("HOME") orelse {
+        c.cadex_label_set(app.agents_status, "HOME is not set");
+        return;
+    };
+    const home = std.mem.span(home_z);
+    const root = std.fmt.allocPrintSentinel(app.gpa, "{s}/.claude/projects", .{home}, 0) catch return;
+    defer app.gpa.free(root);
+    var auth_out: ?[*]u8 = null;
+    var auth_len: usize = 0;
+    if (core.cadex_workspace_authorize(root.ptr, &auth_out, &auth_len) == core.CADEX_OK and auth_out != null) {
+        core.cadex_free(@ptrCast(auth_out.?));
+    }
+    const names_ptr = c.cadex_list_dir(root.ptr) orelse {
+        c.cadex_label_set(app.agents_status, "No ~/.claude/projects folder");
+        return;
+    };
+    defer c.cadex_gtk_free(@ptrCast(names_ptr));
+    const names = std.mem.span(@as([*:0]const u8, @ptrCast(names_ptr)));
+
+    var candidates: std.ArrayList(AgentSession) = .empty;
+    var projects = std.mem.splitScalar(u8, names, '\n');
+    while (projects.next()) |project| {
+        if (project.len == 0 or project[0] == '.') continue;
+        const dir = std.fs.path.join(app.gpa, &.{ root, project }) catch continue;
+        defer app.gpa.free(dir);
+        const dir_z = app.gpa.dupeZ(u8, dir) catch continue;
+        defer app.gpa.free(dir_z);
+        const files_ptr = c.cadex_list_dir(dir_z.ptr) orelse continue;
+        defer c.cadex_gtk_free(@ptrCast(files_ptr));
+        const files = std.mem.span(@as([*:0]const u8, @ptrCast(files_ptr)));
+        var entries = std.mem.splitScalar(u8, files, '\n');
+        while (entries.next()) |name| {
+            if (!endsWithIgnoreCase(name, ".jsonl")) continue;
+            const full = std.fs.path.join(app.gpa, &.{ dir, name }) catch continue;
+            defer app.gpa.free(full);
+            const full_z = app.gpa.dupeZ(u8, full) catch continue;
+            var is_dir: c_int = 0;
+            var mtime: c_longlong = 0;
+            var size: c_longlong = 0;
+            if (c.cadex_path_info(full_z.ptr, &is_dir, &mtime, &size) == 0 or is_dir != 0) {
+                app.gpa.free(full_z);
+                continue;
+            }
+            const label = std.fmt.allocPrint(app.gpa, "{s}/{s}", .{ project, name }) catch {
+                app.gpa.free(full_z);
+                continue;
+            };
+            candidates.append(app.gpa, .{
+                .path = full_z,
+                .label = label,
+                .mtime = @intCast(mtime),
+            }) catch {
+                app.gpa.free(full_z);
+                app.gpa.free(label);
+            };
+        }
+    }
+
+    std.mem.sort(AgentSession, candidates.items, {}, struct {
+        fn lessThan(_: void, a: AgentSession, b: AgentSession) bool {
+            return a.mtime > b.mtime;
+        }
+    }.lessThan);
+
+    var shown: usize = 0;
+    for (candidates.items) |session| {
+        if (shown >= 40) {
+            app.gpa.free(session.path);
+            app.gpa.free(session.label);
+            continue;
+        }
+        const label = app.gpa.dupeZ(u8, session.label) catch {
+            app.gpa.free(session.path);
+            app.gpa.free(session.label);
+            continue;
+        };
+        defer app.gpa.free(label);
+        c.cadex_listbox_append(app.agents_list, label.ptr);
+        app.agent_sessions.append(app.gpa, session) catch {
+            app.gpa.free(session.path);
+            app.gpa.free(session.label);
+        };
+        shown += 1;
+    }
+    candidates.deinit(app.gpa);
+
+    var buf: [96]u8 = undefined;
+    const status = std.fmt.bufPrintZ(&buf, "Sessions: {d}", .{app.agent_sessions.items.len}) catch "Agents";
+    c.cadex_label_set(app.agents_status, status.ptr);
+}
+
+fn agentsRowActivated(index: c_int, user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    if (index < 0) return;
+    const at: usize = @intCast(index);
+    if (at >= app.agent_sessions.items.len) return;
+    openDocument(app, app.agent_sessions.items[at].path, 0);
+}
+
+fn agentsRefreshClicked(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    refreshAgents(app);
+}
+
+fn clearSsh(app: *App) void {
+    for (app.ssh_hosts.items) |host| app.gpa.free(host);
+    app.ssh_hosts.clearRetainingCapacity();
+}
+
+fn refreshSsh(app: *App) void {
+    clearSsh(app);
+    c.cadex_listbox_clear(app.ssh_list);
+    const home_z = std.c.getenv("HOME") orelse {
+        c.cadex_label_set(app.ssh_status, "HOME is not set");
+        return;
+    };
+    const path = std.fmt.allocPrintSentinel(app.gpa, "{s}/.ssh/config", .{std.mem.span(home_z)}, 0) catch return;
+    defer app.gpa.free(path);
+    var len: usize = 0;
+    const raw = c.cadex_read_file(path.ptr, &len);
+    if (raw == null) {
+        c.cadex_label_set(app.ssh_status, "No ~/.ssh/config");
+        return;
+    }
+    defer c.cadex_gtk_free(@ptrCast(raw));
+    const text = raw[0..len];
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    while (lines.next()) |line| {
+        const trimmed = std.mem.trim(u8, line, " \t\r");
+        if (!std.ascii.startsWithIgnoreCase(trimmed, "host ")) continue;
+        var fields = std.mem.tokenizeAny(u8, trimmed[5..], " \t\r");
+        while (fields.next()) |host| {
+            if (host.len == 0 or std.mem.indexOfAny(u8, host, "*?!") != null) continue;
+            var exists = false;
+            for (app.ssh_hosts.items) |known| {
+                if (std.mem.eql(u8, known, host)) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (exists) continue;
+            const copy = app.gpa.dupe(u8, host) catch continue;
+            app.ssh_hosts.append(app.gpa, copy) catch {
+                app.gpa.free(copy);
+                continue;
+            };
+        }
+    }
+    for (app.ssh_hosts.items) |host| {
+        const z = app.gpa.dupeZ(u8, host) catch continue;
+        defer app.gpa.free(z);
+        c.cadex_listbox_append(app.ssh_list, z.ptr);
+    }
+    var buf: [96]u8 = undefined;
+    const status = if (app.ssh_hosts.items.len == 0)
+        "No hosts in ~/.ssh/config"
+    else
+        std.fmt.bufPrintZ(&buf, "Hosts: {d}", .{app.ssh_hosts.items.len}) catch "SSH";
+    c.cadex_label_set(app.ssh_status, status.ptr);
+}
+
+fn sshRowActivated(index: c_int, user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    if (index < 0) return;
+    const at: usize = @intCast(index);
+    if (at >= app.ssh_hosts.items.len) return;
+    const host = app.ssh_hosts.items[at];
+    newTab(app, currentSpace(app)) catch return;
+    const pane = app.focused orelse return;
+    const term = pane.term orelse return;
+    const command = std.fmt.allocPrint(app.gpa, "ssh {s}\n", .{host}) catch return;
+    defer app.gpa.free(command);
+    term.write(command);
+    showMessage(app, "Connecting with ssh");
+}
+
+fn sshRefreshClicked(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    refreshSsh(app);
 }
 
 fn clearEntries(app: *App) void {
@@ -879,6 +1149,7 @@ fn utf8Len(byte: u8) usize {
 }
 
 fn applyDocHighlight(doc: *Doc, text: []const u8) void {
+    if (doc.media) return;
     c.cadex_text_buffer_remove_all_tags(doc.buffer);
     if (doc.diff) {
         applyDiffTags(doc, text);
@@ -945,6 +1216,12 @@ fn applyDiffTags(doc: *Doc, text: []const u8) void {
 }
 
 fn updatePreview(doc: *Doc, text: []const u8) void {
+    if (doc.preview_view) |webview| {
+        const html = buildPreviewHtml(doc.app, text) catch return;
+        defer doc.app.gpa.free(html);
+        c.cadex_webview_load_html(webview, html.ptr, null);
+        return;
+    }
     const label = doc.preview_label orelse return;
     var out: ?[*]u8 = null;
     var len: usize = 0;
@@ -955,6 +1232,34 @@ fn updatePreview(doc: *Doc, text: []const u8) void {
     const z = doc.app.gpa.dupeZ(u8, markup) catch return;
     defer doc.app.gpa.free(z);
     c.cadex_label_set_markup_safe(label, z.ptr);
+}
+
+fn buildPreviewHtml(app: *App, text: []const u8) ![:0]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(app.gpa);
+    var body: ?[*]u8 = null;
+    var body_len: usize = 0;
+    if (core.cadex_markdown_render(text.ptr, text.len, &body, &body_len) != core.CADEX_OK or body == null) {
+        return error.Markdown;
+    }
+    defer core.cadex_free(@ptrCast(body.?));
+    const theme = themes[app.theme_index];
+    const head = try std.fmt.allocPrint(app.gpa,
+        "<!doctype html><html><head><meta charset=\"utf-8\"><style>" ++
+            "body{{background:#{x:0>6};color:#{x:0>6};font-family:system-ui,sans-serif;" ++
+            "font-size:15px;line-height:1.55;padding:18px;margin:0;}}" ++
+            "a{{color:#4fc1ff;}}pre{{background:#{x:0>6};padding:12px;border-radius:6px;overflow:auto;}}" ++
+            "code{{background:#{x:0>6};padding:1px 4px;border-radius:4px;font-family:monospace;}}" ++
+            "pre code{{background:transparent;padding:0;}}" ++
+            "blockquote{{border-left:3px solid #4fc1ff;margin-left:0;padding-left:12px;color:#9aa0a6;}}" ++
+            "table{{border-collapse:collapse;}}td,th{{border:1px solid #555;padding:4px 8px;}}" ++
+            "img{{max-width:100%;}}</style></head><body>",
+        .{ theme.background, theme.foreground, theme.panel, theme.panel });
+    defer app.gpa.free(head);
+    try out.appendSlice(app.gpa, head);
+    try out.appendSlice(app.gpa, body.?[0..body_len]);
+    try out.appendSlice(app.gpa, "</body></html>");
+    return app.gpa.dupeZ(u8, out.items);
 }
 
 fn openDocument(app: *App, path: [:0]const u8, line: usize) void {
@@ -972,6 +1277,22 @@ fn openDocument(app: *App, path: [:0]const u8, line: usize) void {
         }
     }
 
+    const title = std.fs.path.basename(path);
+    switch (mediaKind(title)) {
+        .image => {
+            openMediaTab(app, path, title, .image);
+            return;
+        },
+        .video => {
+            openMediaTab(app, path, title, .video);
+            return;
+        },
+        .audio => {
+            openMediaTab(app, path, title, .audio);
+            return;
+        },
+        .none => {},
+    }
     var data: ?[*]u8 = null;
     var len: usize = 0;
     if (core.cadex_explorer_read_text(path.ptr, 0, &data, &len) != core.CADEX_OK or data == null) {
@@ -981,7 +1302,6 @@ fn openDocument(app: *App, path: [:0]const u8, line: usize) void {
     }
     defer core.cadex_free(@ptrCast(data.?));
     const text = data.?[0..len];
-    const title = std.fs.path.basename(path);
     const markdown = endsWithIgnoreCase(title, ".md") or endsWithIgnoreCase(title, ".markdown");
     _ = createDocTab(app, currentSpace(app), path, title, text, markdown, false, false, line) catch {
         showMessage(app, "Could not open the document");
@@ -992,6 +1312,92 @@ fn openTextTab(app: *App, title: []const u8, text: []const u8, diff: bool) void 
     _ = createDocTab(app, currentSpace(app), "", title, text, false, true, diff, 0) catch {
         showMessage(app, "Could not open the view");
     };
+}
+
+const MediaKind = enum { none, image, video, audio };
+
+const image_exts = [_][]const u8{ ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".ico", ".avif" };
+const video_exts = [_][]const u8{ ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v", ".ogv" };
+const audio_exts = [_][]const u8{ ".mp3", ".ogg", ".oga", ".flac", ".wav", ".m4a", ".opus" };
+
+fn mediaKind(name: []const u8) MediaKind {
+    for (image_exts) |ext| if (endsWithIgnoreCase(name, ext)) return .image;
+    for (video_exts) |ext| if (endsWithIgnoreCase(name, ext)) return .video;
+    for (audio_exts) |ext| if (endsWithIgnoreCase(name, ext)) return .audio;
+    return .none;
+}
+
+fn openMediaTab(app: *App, path: [:0]const u8, title: []const u8, kind: MediaKind) void {
+    const gpa = app.gpa;
+    const tab = gpa.create(Tab) catch return;
+    const path_copy = gpa.dupeZ(u8, path) catch return;
+    const title_copy = gpa.dupeZ(u8, title) catch return;
+    const container = c.cadex_box_new() orelse return;
+    const label_box = c.cadex_box_new_h(4) orelse return;
+    const title_label = c.cadex_label_new(title_copy.ptr) orelse return;
+    c.cadex_label_ellipsize(title_label);
+    c.cadex_widget_set_size(title_label, 160, -1);
+    c.cadex_widget_add_class(label_box, "cadex-tab-label");
+    c.cadex_box_append(label_box, title_label);
+    c.cadex_box_append(label_box, c.cadex_button_new("×", tabCloseClicked, tab) orelse return);
+    tab.* = .{
+        .app = app,
+        .space = currentSpace(app),
+        .container = container,
+        .content = undefined,
+        .label_box = label_box,
+        .title_label = title_label,
+        .kind = .document,
+    };
+    const doc = gpa.create(Doc) catch return;
+    doc.* = .{
+        .app = app,
+        .tab = tab,
+        .path = path_copy,
+        .title = title_copy,
+        .view = undefined,
+        .buffer = undefined,
+        .scroll = undefined,
+        .language = switch (kind) {
+            .image => "Image",
+            .video => "Video",
+            .audio => "Audio",
+            .none => "Media",
+        },
+        .virtual = true,
+        .media = true,
+    };
+    tab.doc = doc;
+
+    const header = c.cadex_box_new_h(6) orelse return;
+    c.cadex_widget_add_class(header, "cadex-doc-header");
+    const doc_title = c.cadex_label_new(title_copy.ptr) orelse return;
+    c.cadex_label_ellipsize(doc_title);
+    c.cadex_widget_expand_h(doc_title);
+    c.cadex_box_append(header, doc_title);
+    c.cadex_box_append(header, c.cadex_button_new("×", tabCloseClicked, tab) orelse return);
+    c.cadex_box_append(container, header);
+
+    const content: *anyopaque = switch (kind) {
+        .image => c.cadex_picture_new(path.ptr),
+        .video, .audio => c.cadex_video_new(path.ptr),
+        .none => null,
+    } orelse {
+        showMessage(app, "Could not open this media file");
+        return;
+    };
+    doc.view = content;
+    doc.scroll = content;
+    c.cadex_widget_expand(content);
+    c.cadex_box_append(container, content);
+    tab.content = content;
+    c.cadex_notebook_append(tab.space.notebook, container, label_box);
+    tab.space.tabs.append(gpa, tab) catch return;
+    c.cadex_notebook_set_current(tab.space.notebook, @intCast(tab.space.tabs.items.len - 1));
+    app.active_doc = doc;
+    app.focused = null;
+    updateTitle(app);
+    updateStatus(app);
 }
 
 fn createDocTab(
@@ -1075,16 +1481,23 @@ fn createDocTab(
     var content: *anyopaque = scroller;
     if (markdown) {
         const paned = c.cadex_paned_new(HORIZONTAL) orelse return error.GtkFailed;
-        const preview_label = c.cadex_label_new("") orelse return error.GtkFailed;
-        c.cadex_label_set_wrap(preview_label, 1);
-        c.cadex_label_set_selectable(preview_label, 1);
-        c.cadex_widget_set_valign(preview_label, 0);
-        c.cadex_widget_add_class(preview_label, "cadex-preview");
-        const preview_scroll = c.cadex_scrolled_new(preview_label) orelse return error.GtkFailed;
-        doc.preview_label = preview_label;
-        doc.preview_scroll = preview_scroll;
+        if (c.cadex_webkit_available() != 0) {
+            const webview = c.cadex_webview_new() orelse return error.GtkFailed;
+            doc.preview_view = webview;
+            doc.preview_scroll = webview;
+            c.cadex_paned_set_end(paned, webview);
+        } else {
+            const preview_label = c.cadex_label_new("") orelse return error.GtkFailed;
+            c.cadex_label_set_wrap(preview_label, 1);
+            c.cadex_label_set_selectable(preview_label, 1);
+            c.cadex_widget_set_valign(preview_label, 0);
+            c.cadex_widget_add_class(preview_label, "cadex-preview");
+            const preview_scroll = c.cadex_scrolled_new(preview_label) orelse return error.GtkFailed;
+            doc.preview_label = preview_label;
+            doc.preview_scroll = preview_scroll;
+            c.cadex_paned_set_end(paned, preview_scroll);
+        }
         c.cadex_paned_set_start(paned, scroller);
-        c.cadex_paned_set_end(paned, preview_scroll);
         c.cadex_paned_set_position(paned, 520);
         content = paned;
     }
@@ -1440,6 +1853,12 @@ fn openSidebarPage(app: *App, name: [*:0]const u8) void {
     } else if (std.mem.eql(u8, page, "history")) {
         if (!app.history_loaded) loadHistory(app, false);
         c.cadex_listbox_focus_first(app.history_list);
+    } else if (std.mem.eql(u8, page, "agents")) {
+        refreshAgents(app);
+        c.cadex_listbox_focus_first(app.agents_list);
+    } else if (std.mem.eql(u8, page, "ssh")) {
+        refreshSsh(app);
+        c.cadex_listbox_focus_first(app.ssh_list);
     }
 }
 
@@ -2106,7 +2525,11 @@ fn onBell(user: ?*anyopaque) callconv(.c) void {
 
 fn paneBellIdle(user: ?*anyopaque) callconv(.c) void {
     const pane: *Pane = @ptrCast(@alignCast(user.?));
-    if (!pane.closed) c.cadex_beep(pane.area);
+    if (pane.closed) return;
+    c.cadex_beep(pane.area);
+    if (c.cadex_window_is_active(pane.app.window) == 0) {
+        c.cadex_notify("Cadex", pane.title.ptr);
+    }
 }
 
 fn onExit(user: ?*anyopaque, code: i32) callconv(.c) void {
@@ -2259,7 +2682,7 @@ fn reapplyDocs(app: *App) void {
     for (app.spaces.items) |space| {
         for (space.tabs.items) |tab| {
             const doc = tab.doc orelse continue;
-            if (!doc.alive) continue;
+            if (!doc.alive or doc.media) continue;
             var len: usize = 0;
             const raw = c.cadex_text_view_get_text(doc.view, &len) orelse continue;
             defer c.cadex_gtk_free(@ptrCast(raw));
@@ -2420,7 +2843,7 @@ fn handleShortcut(app: *App, keyval: c_uint, state: c_uint) bool {
         'a', 'A' => "terminal.select-all",
         'b', 'B' => "view.toggle-sidebar",
         'e', 'E' => "sidebar.files",
-        'p', 'P' => "sidebar.search",
+        'p', 'P' => if (alt) "power.toggle" else "sidebar.search",
         'g', 'G' => "sidebar.git",
         'h', 'H' => "sidebar.history",
         's', 'S' => "document.save",
@@ -2778,6 +3201,36 @@ fn cmdSidebarHistory(app: *App) void {
     openSidebarPage(app, "history");
 }
 
+fn cmdSidebarAgents(app: *App) void {
+    openSidebarPage(app, "agents");
+}
+
+fn cmdSidebarSsh(app: *App) void {
+    openSidebarPage(app, "ssh");
+}
+
+fn cmdTogglePower(app: *App) void {
+    if (app.power_pid > 0) {
+        c.cadex_inhibit_stop(app.power_pid);
+        app.power_pid = 0;
+        if (app.power_button) |button| c.cadex_button_set_text(button, "Keep Awake");
+        showMessage(app, "Sleep is allowed again");
+        return;
+    }
+    app.power_pid = c.cadex_inhibit_start("Cadex is keeping the machine awake");
+    if (app.power_pid > 0) {
+        if (app.power_button) |button| c.cadex_button_set_text(button, "Awake");
+        showMessage(app, "Keeping the machine awake");
+    } else {
+        showMessage(app, "Could not inhibit sleep (systemd-inhibit missing)");
+    }
+}
+
+fn cmdTestNotification(app: *App) void {
+    c.cadex_notify("Cadex", "Notifications are working");
+    showMessage(app, "Notification sent");
+}
+
 fn cmdSaveDocument(app: *App) void {
     if (app.active_doc) |doc| {
         saveDoc(doc);
@@ -2839,6 +3292,21 @@ fn sidebarGitClicked(user: ?*anyopaque) callconv(.c) void {
 fn sidebarHistoryClicked(user: ?*anyopaque) callconv(.c) void {
     const app: *App = @ptrCast(@alignCast(user.?));
     cmdSidebarHistory(app);
+}
+
+fn sidebarAgentsClicked(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    cmdSidebarAgents(app);
+}
+
+fn sidebarSshClicked(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    cmdSidebarSsh(app);
+}
+
+fn powerClicked(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    cmdTogglePower(app);
 }
 
 fn paletteClicked(user: ?*anyopaque) callconv(.c) void {

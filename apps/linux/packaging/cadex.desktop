@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Cadex
+GenericName=Terminal and development workspace
+Comment=Terminal, editor, git and notes in one Wayland window
+Exec=cadex %F
+Icon=cadex
+Terminal=false
+Categories=Development;TerminalEmulator;Utility;
+MimeType=inode/directory;text/markdown;text/plain;
+Keywords=terminal;git;editor;markdown;workspace;
+StartupWMClass=cadex

@@ -1,7 +1,13 @@
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "gtk_shim.h"
 
 #include <gtk/gtk.h>
 #include <glib/gstdio.h>
+#include <signal.h>
+#include <sys/stat.h>
 #include <pango/pangocairo.h>
 #include <string.h>
 
@@ -833,6 +839,13 @@ void cadex_window_hide(void *window) {
     gtk_widget_set_visible(GTK_WIDGET(window), FALSE);
 }
 
+void cadex_widget_set_margins(void *widget, int start, int end, int top, int bottom) {
+    gtk_widget_set_margin_start(GTK_WIDGET(widget), start);
+    gtk_widget_set_margin_end(GTK_WIDGET(widget), end);
+    gtk_widget_set_margin_top(GTK_WIDGET(widget), top);
+    gtk_widget_set_margin_bottom(GTK_WIDGET(widget), bottom);
+}
+
 void cadex_widget_set_size(void *widget, int width, int height) {
     gtk_widget_set_size_request(GTK_WIDGET(widget), width, height);
 }
@@ -1142,4 +1155,117 @@ void cadex_listbox_focus_first(void *box) {
     GtkListBoxRow *row = gtk_list_box_get_row_at_index(list, 0);
     if (row) gtk_list_box_select_row(list, row);
     gtk_widget_grab_focus(GTK_WIDGET(box));
+}
+
+/* ---- Previews and integrations (Run 5) -------------------------------- */
+
+#ifdef CADEX_HAS_WEBKIT
+#include <webkit/webkit.h>
+#endif
+
+int cadex_webkit_available(void) {
+#ifdef CADEX_HAS_WEBKIT
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+void *cadex_webview_new(void) {
+#ifdef CADEX_HAS_WEBKIT
+    GtkWidget *view = webkit_web_view_new();
+    gtk_widget_set_vexpand(view, TRUE);
+    gtk_widget_set_hexpand(view, TRUE);
+    return view;
+#else
+    return NULL;
+#endif
+}
+
+void cadex_webview_load_html(void *view, const char *html, const char *base_uri) {
+#ifdef CADEX_HAS_WEBKIT
+    if (view) webkit_web_view_load_html(WEBKIT_WEB_VIEW(view), html, base_uri);
+#else
+    (void)view; (void)html; (void)base_uri;
+#endif
+}
+
+void cadex_webview_load_uri(void *view, const char *uri) {
+#ifdef CADEX_HAS_WEBKIT
+    if (view) webkit_web_view_load_uri(WEBKIT_WEB_VIEW(view), uri);
+#else
+    (void)view; (void)uri;
+#endif
+}
+
+void *cadex_picture_new(const char *path) {
+    GtkWidget *picture = gtk_picture_new_for_filename(path);
+    gtk_picture_set_can_shrink(GTK_PICTURE(picture), TRUE);
+    gtk_widget_set_vexpand(picture, TRUE);
+    gtk_widget_set_hexpand(picture, TRUE);
+    return picture;
+}
+
+void *cadex_video_new(const char *path) {
+    GtkWidget *video = gtk_video_new();
+    GtkMediaStream *media = gtk_media_file_new_for_filename(path);
+    gtk_video_set_media_stream(GTK_VIDEO(video), GTK_MEDIA_STREAM(media));
+    gtk_video_set_autoplay(GTK_VIDEO(video), FALSE);
+    gtk_widget_set_vexpand(video, TRUE);
+    gtk_widget_set_hexpand(video, TRUE);
+    return video;
+}
+
+int cadex_inhibit_start(const char *reason) {
+    char *argv[] = { "systemd-inhibit", "--what=idle:sleep", "--who=Cadex",
+                     (char *)reason, "sleep", "infinity", NULL };
+    int pid = 0;
+    GError *error = NULL;
+    if (!g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH | G_SPAWN_DO_NOT_REAP_CHILD,
+                       NULL, NULL, &pid, &error)) {
+        if (error) g_error_free(error);
+        return 0;
+    }
+    return pid;
+}
+
+void cadex_inhibit_stop(int pid) {
+    if (pid <= 0) return;
+    kill(pid, SIGTERM);
+    g_spawn_close_pid(pid);
+}
+
+void cadex_notify(const char *title, const char *body) {
+    GApplication *app = g_application_get_default();
+    if (!app) return;
+    GNotification *notification = g_notification_new(title);
+    g_notification_set_body(notification, body);
+    g_application_send_notification(app, "cadex", notification);
+    g_object_unref(notification);
+}
+
+char *cadex_list_dir(const char *path) {
+    GDir *dir = g_dir_open(path, 0, NULL);
+    if (!dir) return NULL;
+    GString *out = g_string_new(NULL);
+    const char *name = NULL;
+    while ((name = g_dir_read_name(dir)) != NULL) {
+        g_string_append(out, name);
+        g_string_append_c(out, '\n');
+    }
+    g_dir_close(dir);
+    return g_string_free(out, FALSE);
+}
+
+int cadex_window_is_active(void *window) {
+    return window && gtk_window_is_active(GTK_WINDOW(window)) ? 1 : 0;
+}
+
+int cadex_path_info(const char *path, int *is_dir, long long *mtime, long long *size) {
+    GStatBuf st;
+    if (g_stat(path, &st) != 0) return 0;
+    if (is_dir) *is_dir = S_ISDIR(st.st_mode) ? 1 : 0;
+    if (mtime) *mtime = (long long)st.st_mtime;
+    if (size) *size = (long long)st.st_size;
+    return 1;
 }
