@@ -2,7 +2,7 @@
 
 ## O que eu quero
 - Gerar os três artefatos da fase 5: AppImage, `.deb` e `.rpm`, com as bibliotecas do
-  sistema (GTK4/WebKitGTK/GStreamer), sem empacotar o WebKit.
+  sistema (GTK4/libadwaita/WebKitGTK/GStreamer), sem empacotar o WebKit.
 - Um `install.sh` sem root que baixa o AppImage e instala em `~/.local/bin`, e um
   `release.sh` que só roda com `CADEX_LINUX=1`.
 

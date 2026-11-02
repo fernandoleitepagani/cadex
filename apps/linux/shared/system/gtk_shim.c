@@ -953,6 +953,10 @@ void cadex_button_set_text(void *button, const char *text) {
     gtk_button_set_label(GTK_BUTTON(button), text);
 }
 
+void cadex_button_set_icon(void *button, const char *icon) {
+    gtk_button_set_icon_name(GTK_BUTTON(button), icon);
+}
+
 void *cadex_header_button_start(void *header, const char *text, cadex_simple_fn fn, void *user) {
     GtkWidget *button = gtk_button_new_with_label(text);
     CadexSimple *simple = g_new0(CadexSimple, 1);

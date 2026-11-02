@@ -112,6 +112,7 @@ void *cadex_header_button_start(void *header, const char *text, cadex_simple_fn 
 void cadex_header_widget_start(void *header, void *widget);
 void cadex_header_widget_end(void *header, void *widget);
 void cadex_button_set_text(void *button, const char *text);
+void cadex_button_set_icon(void *button, const char *icon);
 void cadex_text_set_font(const char *font);
 void cadex_widget_unparent(void *widget);
 void cadex_widget_ref(void *widget);

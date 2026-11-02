@@ -1940,6 +1940,7 @@ fn openDocument(app: *App, path: [:0]const u8, line: usize) void {
             if (std.mem.eql(u8, doc.path, path)) {
                 c.cadex_notebook_set_current(space.notebook, @intCast(tab_index));
                 switchSpace(app, space_index);
+                openPage(app, .terminal);
                 c.cadex_text_view_scroll_to_line(doc.view, @intCast(line));
                 return;
             }
@@ -2225,16 +2226,19 @@ fn createDocTab(
     c.cadex_widget_expand_h(doc_title);
     c.cadex_box_append(header, doc_title);
     if (!virtual and markdown) {
-        doc.save_button = c.cadex_button_new("Save", docSaveClicked, doc) orelse return error.GtkFailed;
+        doc.save_button = c.cadex_adw_icon_button("document-save-symbolic", docSaveClicked, doc) orelse return error.GtkFailed;
+        c.cadex_widget_set_tooltip(doc.save_button.?, "Save");
         c.cadex_box_append(header, doc.save_button.?);
     }
     if (markdown) {
-        doc.notes_button = c.cadex_button_new("Notes", docNotesClicked, doc) orelse return error.GtkFailed;
+        doc.notes_button = c.cadex_adw_icon_button("view-list-symbolic", docNotesClicked, doc) orelse return error.GtkFailed;
+        c.cadex_widget_set_tooltip(doc.notes_button.?, "Headings and backlinks");
         c.cadex_box_append(header, doc.notes_button.?);
-        doc.preview_button = c.cadex_button_new("Hide Preview", docPreviewClicked, doc) orelse return error.GtkFailed;
+        doc.preview_button = c.cadex_adw_icon_button("view-conceal-symbolic", docPreviewClicked, doc) orelse return error.GtkFailed;
+        c.cadex_widget_set_tooltip(doc.preview_button.?, "Hide preview");
         c.cadex_box_append(header, doc.preview_button.?);
     }
-    c.cadex_box_append(header, c.cadex_button_new("×", tabCloseClicked, tab) orelse return error.GtkFailed);
+    c.cadex_box_append(header, c.cadex_adw_icon_button("window-close-symbolic", tabCloseClicked, tab) orelse return error.GtkFailed);
     c.cadex_box_append(container, header);
 
     const view = c.cadex_text_view_new() orelse return error.GtkFailed;
@@ -2302,6 +2306,7 @@ fn createDocTab(
     c.cadex_widget_focus(view);
     updateTitle(app);
     updateStatus(app);
+    openPage(app, .terminal);
     if (line > 0) c.cadex_text_view_scroll_to_line(view, @intCast(line));
     return doc;
 }
@@ -2526,7 +2531,8 @@ fn togglePreview(doc: *Doc) void {
     doc.preview_visible = !doc.preview_visible;
     c.cadex_widget_visible(preview, @intFromBool(doc.preview_visible));
     if (doc.preview_button) |button| {
-        c.cadex_button_set_text(button, if (doc.preview_visible) "Hide Preview" else "Show Preview");
+        c.cadex_button_set_icon(button, if (doc.preview_visible) "view-conceal-symbolic" else "view-reveal-symbolic");
+        c.cadex_widget_set_tooltip(button, if (doc.preview_visible) "Hide preview" else "Show preview");
     }
 }
 
@@ -3012,6 +3018,7 @@ fn openSideBySideTab(app: *App, title: []const u8, before: []const u8, after: []
     app.focused = null;
     updateTitle(app);
     updateStatus(app);
+    openPage(app, .terminal);
 }
 
 fn makeTextView(text: []const u8, label: []const u8) ?*anyopaque {
@@ -3627,7 +3634,7 @@ fn createPane(app: *App, tab: *Tab) !*Pane {
     pane.header_label = c.cadex_label_new("Terminal") orelse return error.GtkFailed;
     c.cadex_label_ellipsize(pane.header_label);
     c.cadex_box_append(header, pane.header_label);
-    c.cadex_box_append(header, c.cadex_button_new("×", paneCloseClicked, pane) orelse return error.GtkFailed);
+    c.cadex_box_append(header, c.cadex_adw_icon_button("window-close-symbolic", paneCloseClicked, pane) orelse return error.GtkFailed);
     c.cadex_box_append(pane.container, header);
     pane.area = c.cadex_drawing_new() orelse return error.GtkFailed;
     c.cadex_widget_expand(pane.area);
