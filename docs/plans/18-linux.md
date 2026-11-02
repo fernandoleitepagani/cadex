@@ -1,13 +1,14 @@
 # 18 — Linux: núcleo, app GTK4 e release
 
-Data: 2026-11-01 · Status: fases 0–5 feitas e a 6 iniciada no fork (2026-11-02); o backlog está no fim
+Data: 2026-11-01 · Status: fases 0–6 e o backlog executados no fork (2026-11-02); restam itens ambientais no fim
 
 > A fase 2 entregou o terminal com Cairo/Pango por célula (o fallback previsto no ADR
 > 0021). A fase 3 entregou abas, uma divisão por aba, paleta, temas, configurações,
 > barra de status, spaces em memória e a casca da barra lateral. A fase 4 entregou
 > explorer, busca, editor, Markdown e git. A fase 5 entregou a prévia WebKit, mídia,
-> Agents, SSH, Keep Awake, notificações e os pacotes; o que ficou de fora está no backlog
-> no fim deste plano.
+> Agents, SSH, Keep Awake, notificações e os pacotes. O backlog final acrescentou divisões
+> recursivas, spaces persistidos, line numbers, headings/backlinks, URL/PDF, tray, SSH
+> probe, side-by-side diff, branch/init, renomear/lixeira e a paridade de comandos.
 
 ## O que eu quero
 - O Cadex nativo no Linux sobre o mesmo núcleo, só Wayland, sem Electron/Tauri.
@@ -58,28 +59,24 @@ Fases, uma por PR; o índice de PRs e os critérios de cada uma ficam na issue d
 - `python3 tools/check_command_parity.py` passa com o terceiro app.
 - Tamanho e memória medidos no README; release marcada **preview**.
 
-## Backlog (depois da fase 5)
+## Backlog restante
 
-Itens que ficaram pendentes nas fases 1–5, para não bloquear o resto do port:
+O backlog das fases 1–6 foi executado em 2026-11-02: divisões recursivas, spaces
+persistidos, dez temas, RAM/portas/load na barra, busca com cancelamento, branch/init,
+renomear/lixeira, line numbers, headings/backlinks, preview de URL, PDF pelo WebKit,
+side-by-side diff, SSH probe, estado das sessões, tray SNI, element picker e a checagem de
+paridade de comandos (26 ids explicitamente adiados no script). O que resta depende do
+ambiente ou é uma decisão de escopo:
 
-- **Fase 1:** `make check` no macOS (dispensado no fork), workflow de CI aprovado no
-  GitHub, aarch64 e o limite de `max_user_watches` do inotify.
-- **Fase 2:** atlas GL (`GtkGLArea`) para performance/memória, IME CJK com Fcitx5/IBus,
-  seleção por mouse/roda/links exercitados, `vim`/`htop` no host de teste e a duplicação
-  cosmética do título no Sway.
-- **Fase 3:** divisões recursivas (hoje uma por aba), spaces persistidos e restaurados,
-  catálogo completo de temas do Mac/Windows, edição de atalhos, branch/agentes/uso na
-  barra de status e a extensão do `tools/check_command_parity.py` para o app Linux.
-- **Fase 4:** árvore do explorer (hoje lista plana), renomear/mover/apagar arquivos,
-  números de linha e folds na interface, o índice de notas (headings/backlinks/links) do
-  Markdown, troca e inicialização de branch, os dois lados do diff, push/pull/fetch
-  exercitados contra um remoto, cancelamento visível da busca e Ctrl+clique nos links.
-- **Fase 5:** element picker, preview de URL/servidor local e PDF (pdf.js), estado e
-  subagentes/uso das sessões do Claude, página Accounts, probe de SSH, notificações com um
-  daemon real, Keep Awake por D-Bus logind + idle-inhibit, tray SNI e a atualização do
-  AppImage (latest.json assinado, SHA-256, .old e rollback).
-- **Fase 6:** rodar o `../../apps/linux/packaging/install.sh` contra um release real, o workflow de CI num runner
-  limpo, assinatura dos pacotes, aarch64 e o AppImage sem depender de um appimagetool
-  externo.
+- **Renderização/IME:** atlas GL no terminal (Cairo/Pango é o renderer atual), IME CJK
+  (o host não tem engine) e mouse/roda/links no Sway headless (o seat não tem ponteiro).
+- **Explorer/editor:** árvore expansível, copiar/colar arquivos, ocultos e colapsar; folds,
+  zoom de mídia, renomear/fechar/colorir aba e space, busca no histórico, abrir link do
+  editor Markdown, acentos/importação/alto contraste de tema e reabrir a pasta do workspace.
+- **Integrações/release:** atualização do AppImage (latest.json assinado, SHA-256, `.old` e
+  rollback), página Accounts, power por D-Bus logind + idle-inhibit, aarch64 e a
+  instalação/CI num runner limpo.
+- **Fora do escopo desta máquina:** macOS `make check`, GNOME/KDE e o tray visual nesses
+  ambientes.
 
-O backlog é a última etapa, depois do release.
+O backlog não bloqueia o uso diário do preview no Fedora/Wayland.

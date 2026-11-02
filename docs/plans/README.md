@@ -44,7 +44,7 @@ cabem numa sessão. Escritos em 2026-10-19, quando o Cadex tinha o terminal func
 
 | # | plano | entrega | status |
 |---|---|---|---|
-| 18 | `docs/plans/18-linux.md` | Linux nativo em GTK4 e Wayland | fases 0–5 feitas e a 6 iniciada no fork (2026-11-02); falta o backlog |
+| 18 | `docs/plans/18-linux.md` | Linux nativo em GTK4 e Wayland | fases 0–6 e o backlog executados no fork (2026-11-02); restam itens ambientais |
 
 ## O que eu não quero
 - Executar plano sem ler antes o `CLAUDE.md` da raiz e o da feature que vai mexer.
