@@ -106,6 +106,7 @@ void cadex_stack_set(void *stack, const char *name);
 void *cadex_label_new(const char *text);
 void cadex_label_set(void *label, const char *text);
 void cadex_label_ellipsize(void *label);
+void cadex_label_set_xalign(void *label, double align);
 void *cadex_button_new(const char *text, void (*fn)(void *), void *user);
 void *cadex_header_button_start(void *header, const char *text, cadex_simple_fn fn, void *user);
 void cadex_header_widget_start(void *header, void *widget);
@@ -210,5 +211,44 @@ int cadex_trash_file(const char *path);
 void cadex_ssh_probe(const char *host, void (*fn)(const char *host, int ok, void *user), void *user);
 void cadex_tray_start(void *window, void (*fn)(void *user), void *user);
 int cadex_window_is_active(void *window);
+
+/* ---- Adwaita shell (UI rewrite) --------------------------------------- */
+
+void *cadex_adw_window_split_new(void);
+void cadex_adw_split_set_sidebar(void *split, void *sidebar);
+void cadex_adw_split_set_content(void *split, void *content);
+void cadex_adw_split_set_show_sidebar(void *split, int show);
+int cadex_adw_split_get_show_sidebar(void *split);
+void *cadex_adw_view_switcher_new(void *stack);
+void *cadex_adw_toast_overlay_new(void);
+void cadex_adw_toast_overlay_set_child(void *overlay, void *child);
+void cadex_adw_toast(void *overlay, const char *text);
+void *cadex_adw_window_title_new(const char *title, const char *subtitle);
+void cadex_adw_window_title_set(void *title, const char *text, const char *subtitle);
+void *cadex_adw_icon_button(const char *icon, void (*fn)(void *), void *user);
+void *cadex_adw_menu_button_new(const char *icon, void *popover);
+void *cadex_adw_popover_new(void);
+void cadex_adw_popover_set_child(void *popover, void *child);
+void *cadex_adw_nav_row_new(const char *icon, const char *title);
+void *cadex_adw_action_row_new(const char *title, const char *subtitle);
+void cadex_adw_action_row_add_prefix(void *row, void *widget);
+void cadex_adw_action_row_add_suffix(void *row, void *widget);
+void *cadex_adw_preferences_window_new(void *parent, const char *title);
+void *cadex_adw_preferences_page_new(void);
+void *cadex_adw_preferences_group_new(const char *title);
+void cadex_adw_preferences_group_add(void *group, void *row);
+void cadex_adw_preferences_page_add(void *page, void *group);
+void cadex_adw_preferences_window_add(void *window, void *page);
+void *cadex_adw_status_page_new(const char *icon, const char *title, const char *description);
+void *cadex_adw_clamp_new(int max_width);
+void cadex_widget_set_tooltip(void *widget, const char *text);
+void cadex_widget_set_flat(void *widget);
+void cadex_listbox_append_widget(void *box, void *widget);
+void cadex_listbox_append_action(void *box, const char *icon, const char *title, const char *subtitle);
+void cadex_listbox_select(void *box, int index);
+void cadex_notebook_set_title(void *notebook, void *child, const char *title);
+void cadex_notebook_size(void *notebook, int *w, int *h);
+void cadex_notebook_on_close(void *notebook, void (*fn)(void *child, void *user), void *user);
+void cadex_stack_on_changed(void *stack, void (*fn)(const char *name, void *user), void *user);
 
 #endif

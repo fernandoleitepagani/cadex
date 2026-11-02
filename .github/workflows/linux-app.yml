@@ -17,11 +17,11 @@ jobs:
           if command -v apt-get >/dev/null; then
             apt-get update
             apt-get install -y curl xz-utils ca-certificates gcc libc6-dev pkg-config \
-              libgtk-4-dev libwebkitgtk-6.0-dev libgstreamer1.0-dev \
+              libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev libgstreamer1.0-dev \
               libgstreamer-plugins-base1.0-dev libgdk-pixbuf-2.0-dev \
               libharfbuzz-dev libfreetype-dev libfontconfig-dev
           else
-            dnf install -y curl xz tar gcc pkgconf-pkg-config gtk4-devel \
+            dnf install -y curl xz tar gcc pkgconf-pkg-config gtk4-devel libadwaita-devel \
               webkitgtk6.0-devel gstreamer1-devel gstreamer1-plugins-base-devel \
               gdk-pixbuf2-devel harfbuzz-devel freetype-devel fontconfig-devel
           fi

@@ -5,6 +5,9 @@
 #include "gtk_shim.h"
 
 #include <gtk/gtk.h>
+#ifdef CADEX_HAS_ADW
+#include <adwaita.h>
+#endif
 #include <glib/gstdio.h>
 #include <signal.h>
 #include <sys/stat.h>
@@ -132,6 +135,9 @@ int cadex_text_metrics(void *area, const char *font, int *cell_w, int *cell_h, i
 /* ---- App and window ---------------------------------------------------- */
 
 void *cadex_app_new(void) {
+#ifdef CADEX_HAS_ADW
+    adw_init();
+#endif
     return gtk_application_new("io.github.c4duz.cadex", G_APPLICATION_NON_UNIQUE);
 }
 
@@ -165,7 +171,17 @@ void cadex_app_quit(void *app) {
 }
 
 void *cadex_window_new(void *app, const char *title, int width, int height) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *window = adw_application_window_new(GTK_APPLICATION(app));
+#else
     GtkWidget *window = gtk_application_window_new(GTK_APPLICATION(app));
+#endif
+    gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
+#ifdef CADEX_HAS_ADW
+    GtkWidget *toolbar = adw_toolbar_view_new();
+    adw_application_window_set_content(ADW_APPLICATION_WINDOW(window), toolbar);
+    g_object_set_data(G_OBJECT(window), "cadex-toolbar", toolbar);
+#endif
     gtk_window_set_title(GTK_WINDOW(window), title);
     gtk_window_set_default_size(GTK_WINDOW(window), width, height);
     gtk_window_set_resizable(GTK_WINDOW(window), TRUE);
@@ -179,6 +195,13 @@ void *cadex_window_box(void *window) {
 }
 
 void cadex_window_child(void *window, void *child) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *toolbar = g_object_get_data(G_OBJECT(window), "cadex-toolbar");
+    if (toolbar) {
+        adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(toolbar), GTK_WIDGET(child));
+        return;
+    }
+#endif
     gtk_window_set_child(GTK_WINDOW(window), GTK_WIDGET(child));
 }
 
@@ -220,19 +243,50 @@ void cadex_window_on_close(void *window, cadex_close_fn fn, void *user) {
 /* ---- Header bar -------------------------------------------------------- */
 
 void *cadex_header_new(void *window) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *toolbar = g_object_get_data(G_OBJECT(window), "cadex-toolbar");
+    if (toolbar) {
+        GtkWidget *header = adw_header_bar_new();
+        adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(toolbar), header);
+        return header;
+    }
+#endif
     GtkWidget *header = gtk_header_bar_new();
+    gtk_widget_set_visible(header, TRUE);
     gtk_window_set_titlebar(GTK_WINDOW(window), header);
     return header;
 }
 
 void *cadex_header_title(void *header, const char *text) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *title = adw_window_title_new(text, NULL);
+    adw_header_bar_set_title_widget(ADW_HEADER_BAR(header), title);
+    return title;
+#else
     GtkWidget *label = gtk_label_new(text);
     gtk_header_bar_set_title_widget(GTK_HEADER_BAR(header), label);
     return label;
+#endif
 }
 
 void cadex_header_set_title(void *label, const char *text) {
+#ifdef CADEX_HAS_ADW
+    if (ADW_IS_WINDOW_TITLE(label)) {
+        adw_window_title_set_title(ADW_WINDOW_TITLE(label), text);
+        return;
+    }
+#endif
     gtk_label_set_text(GTK_LABEL(label), text);
+}
+
+void cadex_header_set_subtitle(void *label, const char *text) {
+#ifdef CADEX_HAS_ADW
+    if (ADW_IS_WINDOW_TITLE(label)) {
+        adw_window_title_set_subtitle(ADW_WINDOW_TITLE(label), text);
+        return;
+    }
+#endif
+    (void)label; (void)text;
 }
 
 static void on_button_clicked(GtkButton *button, gpointer user) {
@@ -247,7 +301,19 @@ void *cadex_header_button(void *header, const char *text, cadex_simple_fn fn, vo
     simple->fn = fn;
     simple->user = user;
     g_signal_connect_data(button, "clicked", G_CALLBACK(on_button_clicked), simple, NULL, 0);
+#ifdef CADEX_HAS_ADW
+    #ifdef CADEX_HAS_ADW
+    adw_header_bar_pack_end(ADW_HEADER_BAR(header), button);
+#else
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), button);
+#endif
+#else
+    #ifdef CADEX_HAS_ADW
+    adw_header_bar_pack_end(ADW_HEADER_BAR(header), button);
+#else
+    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), button);
+#endif
+#endif
     return button;
 }
 
@@ -553,61 +619,206 @@ void *cadex_box_new_h(int spacing) {
     return gtk_box_new(GTK_ORIENTATION_HORIZONTAL, spacing);
 }
 
+#ifdef CADEX_HAS_ADW
+static GtkWidget *notebook_view(void *notebook) {
+    return g_object_get_data(G_OBJECT(notebook), "cadex-tab-view");
+}
+
+static const char *tab_label_text(GtkWidget *label) {
+    if (!label) return "";
+    if (GTK_IS_LABEL(label)) return gtk_label_get_text(GTK_LABEL(label));
+    GtkWidget *child = gtk_widget_get_first_child(label);
+    while (child) {
+        if (GTK_IS_LABEL(child)) return gtk_label_get_text(GTK_LABEL(child));
+        child = gtk_widget_get_next_sibling(child);
+    }
+    return "";
+}
+
+static int page_position(AdwTabView *view, AdwTabPage *page) {
+    if (!page) return -1;
+    return adw_tab_view_get_page_position(view, page);
+}
+#endif
+
 void *cadex_notebook_new(void) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_vexpand(box, TRUE);
+    gtk_widget_set_hexpand(box, TRUE);
+    GtkWidget *view = GTK_WIDGET(adw_tab_view_new());
+    GtkWidget *bar = GTK_WIDGET(adw_tab_bar_new());
+    adw_tab_bar_set_view(ADW_TAB_BAR(bar), ADW_TAB_VIEW(view));
+    adw_tab_bar_set_autohide(ADW_TAB_BAR(bar), TRUE);
+    adw_tab_bar_set_expand_tabs(ADW_TAB_BAR(bar), FALSE);
+    gtk_widget_set_hexpand(bar, TRUE);
+    gtk_box_append(GTK_BOX(box), bar);
+    gtk_widget_set_vexpand(view, TRUE);
+    gtk_box_append(GTK_BOX(box), view);
+    g_object_set_data(G_OBJECT(box), "cadex-tab-view", view);
+    return box;
+#else
     GtkWidget *notebook = gtk_notebook_new();
     gtk_notebook_set_show_border(GTK_NOTEBOOK(notebook), FALSE);
     gtk_notebook_set_scrollable(GTK_NOTEBOOK(notebook), TRUE);
     return notebook;
+#endif
 }
 
 void cadex_notebook_append(void *notebook, void *page, void *label) {
+#ifdef CADEX_HAS_ADW
+    AdwTabView *view = ADW_TAB_VIEW(notebook_view(notebook));
+    AdwTabPage *tab = adw_tab_view_append(view, GTK_WIDGET(page));
+    if (tab) adw_tab_page_set_title(tab, tab_label_text(label));
+#else
     gtk_notebook_append_page(GTK_NOTEBOOK(notebook), GTK_WIDGET(page), label ? GTK_WIDGET(label) : NULL);
+#endif
 }
 
 void cadex_notebook_insert(void *notebook, int index, void *page, void *label) {
+#ifdef CADEX_HAS_ADW
+    AdwTabView *view = ADW_TAB_VIEW(notebook_view(notebook));
+    AdwTabPage *tab = adw_tab_view_insert(view, GTK_WIDGET(page), index);
+    if (tab) adw_tab_page_set_title(tab, tab_label_text(label));
+#else
     gtk_notebook_insert_page(GTK_NOTEBOOK(notebook), GTK_WIDGET(page), label ? GTK_WIDGET(label) : NULL, index);
+#endif
 }
 
 void cadex_notebook_remove(void *notebook, int index) {
+#ifdef CADEX_HAS_ADW
+    AdwTabView *view = ADW_TAB_VIEW(notebook_view(notebook));
+    AdwTabPage *page = adw_tab_view_get_nth_page(view, index);
+    if (!page) return;
+    adw_tab_view_close_page(view, page);
+#else
     gtk_notebook_remove_page(GTK_NOTEBOOK(notebook), index);
+#endif
 }
 
 int cadex_notebook_page_num(void *notebook, void *page) {
+#ifdef CADEX_HAS_ADW
+    AdwTabView *view = ADW_TAB_VIEW(notebook_view(notebook));
+    return page_position(view, adw_tab_view_get_page(view, GTK_WIDGET(page)));
+#else
     return gtk_notebook_page_num(GTK_NOTEBOOK(notebook), GTK_WIDGET(page));
+#endif
 }
 
 int cadex_notebook_current(void *notebook) {
+#ifdef CADEX_HAS_ADW
+    AdwTabView *view = ADW_TAB_VIEW(notebook_view(notebook));
+    return page_position(view, adw_tab_view_get_selected_page(view));
+#else
     return gtk_notebook_get_current_page(GTK_NOTEBOOK(notebook));
+#endif
 }
 
 void cadex_notebook_set_current(void *notebook, int index) {
+#ifdef CADEX_HAS_ADW
+    AdwTabView *view = ADW_TAB_VIEW(notebook_view(notebook));
+    AdwTabPage *page = adw_tab_view_get_nth_page(view, index);
+    if (page) adw_tab_view_set_selected_page(view, page);
+#else
     gtk_notebook_set_current_page(GTK_NOTEBOOK(notebook), index);
+#endif
 }
 
 int cadex_notebook_count(void *notebook) {
+#ifdef CADEX_HAS_ADW
+    return (int)adw_tab_view_get_n_pages(ADW_TAB_VIEW(notebook_view(notebook)));
+#else
     return gtk_notebook_get_n_pages(GTK_NOTEBOOK(notebook));
+#endif
 }
 
 void *cadex_notebook_page(void *notebook, int index) {
+#ifdef CADEX_HAS_ADW
+    AdwTabPage *page = adw_tab_view_get_nth_page(ADW_TAB_VIEW(notebook_view(notebook)), index);
+    return page ? adw_tab_page_get_child(page) : NULL;
+#else
     return gtk_notebook_get_nth_page(GTK_NOTEBOOK(notebook), index);
+#endif
 }
 
 typedef struct {
     void (*fn)(void *notebook, int index, void *user);
+    void *notebook;
     void *user;
 } CadexNotebookSwitch;
 
+#ifdef CADEX_HAS_ADW
+static void on_notebook_switch(GObject *object, GParamSpec *pspec, gpointer user) {
+    (void)pspec;
+    CadexNotebookSwitch *sw = user;
+    AdwTabView *view = ADW_TAB_VIEW(object);
+    AdwTabPage *page = adw_tab_view_get_selected_page(view);
+    sw->fn(sw->notebook, page_position(view, page), sw->user);
+}
+#else
 static void on_notebook_switch(GtkNotebook *notebook, GtkWidget *page, guint index, gpointer user) {
     (void)page;
     CadexNotebookSwitch *sw = user;
     sw->fn(notebook, (int)index, sw->user);
 }
+#endif
 
 void cadex_notebook_on_switch(void *notebook, void (*fn)(void *notebook, int index, void *user), void *user) {
     CadexNotebookSwitch *sw = g_new0(CadexNotebookSwitch, 1);
     sw->fn = fn;
+    sw->notebook = notebook;
     sw->user = user;
+#ifdef CADEX_HAS_ADW
+    g_signal_connect_data(notebook_view(notebook), "notify::selected-page", G_CALLBACK(on_notebook_switch), sw, NULL, 0);
+#else
     g_signal_connect_data(notebook, "switch-page", G_CALLBACK(on_notebook_switch), sw, NULL, 0);
+#endif
+}
+
+void cadex_notebook_size(void *notebook, int *w, int *h) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *view = notebook_view(notebook);
+    if (w) *w = gtk_widget_get_width(view);
+    if (h) *h = gtk_widget_get_height(view);
+#else
+    (void)notebook; (void)w; (void)h;
+#endif
+}
+
+void cadex_notebook_set_title(void *notebook, void *child, const char *title) {
+#ifdef CADEX_HAS_ADW
+    AdwTabView *view = ADW_TAB_VIEW(notebook_view(notebook));
+    AdwTabPage *page = adw_tab_view_get_page(view, GTK_WIDGET(child));
+    if (page) adw_tab_page_set_title(page, title);
+#else
+    (void)notebook; (void)child; (void)title;
+#endif
+}
+
+typedef struct {
+    void (*fn)(void *child, void *user);
+    void *user;
+} CadexNotebookClose;
+
+#ifdef CADEX_HAS_ADW
+static gboolean on_notebook_close(AdwTabView *view, AdwTabPage *page, gpointer user) {
+    CadexNotebookClose *close = user;
+    GtkWidget *child = adw_tab_page_get_child(page);
+    close->fn(child, close->user);
+    (void)view;
+    return FALSE;
+}
+#endif
+
+void cadex_notebook_on_close(void *notebook, void (*fn)(void *child, void *user), void *user) {
+#ifdef CADEX_HAS_ADW
+    CadexNotebookClose *close = g_new0(CadexNotebookClose, 1);
+    close->fn = fn;
+    close->user = user;
+    g_signal_connect_data(notebook_view(notebook), "close-page", G_CALLBACK(on_notebook_close), close, NULL, 0);
+#else
+    (void)notebook; (void)fn; (void)user;
+#endif
 }
 
 void *cadex_paned_new(int orientation) {
@@ -627,15 +838,53 @@ void cadex_paned_set_position(void *paned, int position) {
 }
 
 void *cadex_stack_new(void) {
+#ifdef CADEX_HAS_ADW
+    return adw_view_stack_new();
+#else
     return gtk_stack_new();
+#endif
 }
 
 void cadex_stack_add(void *stack, void *child, const char *name) {
+#ifdef CADEX_HAS_ADW
+    AdwViewStackPage *page = adw_view_stack_add_named(ADW_VIEW_STACK(stack), GTK_WIDGET(child), name);
+    if (page) adw_view_stack_page_set_title(page, name);
+#else
     gtk_stack_add_named(GTK_STACK(stack), GTK_WIDGET(child), name);
+#endif
 }
 
 void cadex_stack_set(void *stack, const char *name) {
+#ifdef CADEX_HAS_ADW
+    adw_view_stack_set_visible_child_name(ADW_VIEW_STACK(stack), name);
+#else
     gtk_stack_set_visible_child_name(GTK_STACK(stack), name);
+#endif
+}
+
+typedef struct {
+    void (*fn)(const char *name, void *user);
+    void *user;
+} CadexStackSwitch;
+
+#ifdef CADEX_HAS_ADW
+static void on_stack_changed(GObject *object, GParamSpec *pspec, gpointer user) {
+    (void)pspec;
+    CadexStackSwitch *sw = user;
+    const char *name = adw_view_stack_get_visible_child_name(ADW_VIEW_STACK(object));
+    if (name) sw->fn(name, sw->user);
+}
+#endif
+
+void cadex_stack_on_changed(void *stack, void (*fn)(const char *name, void *user), void *user) {
+#ifdef CADEX_HAS_ADW
+    CadexStackSwitch *sw = g_new0(CadexStackSwitch, 1);
+    sw->fn = fn;
+    sw->user = user;
+    g_signal_connect_data(stack, "notify::visible-child", G_CALLBACK(on_stack_changed), sw, NULL, 0);
+#else
+    (void)stack; (void)fn; (void)user;
+#endif
 }
 
 void *cadex_label_new(const char *text) {
@@ -649,6 +898,10 @@ void cadex_label_set(void *label, const char *text) {
 void cadex_label_ellipsize(void *label) {
     gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
     gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+}
+
+void cadex_label_set_xalign(void *label, double align) {
+    gtk_label_set_xalign(GTK_LABEL(label), (float)align);
 }
 
 void *cadex_button_new(const char *text, void (*fn)(void *), void *user) {
@@ -665,11 +918,35 @@ void cadex_text_set_font(const char *font) {
 }
 
 void cadex_header_widget_start(void *header, void *widget) {
+#ifdef CADEX_HAS_ADW
+    #ifdef CADEX_HAS_ADW
+    adw_header_bar_pack_start(ADW_HEADER_BAR(header), GTK_WIDGET(widget));
+#else
     gtk_header_bar_pack_start(GTK_HEADER_BAR(header), GTK_WIDGET(widget));
+#endif
+#else
+    #ifdef CADEX_HAS_ADW
+    adw_header_bar_pack_start(ADW_HEADER_BAR(header), GTK_WIDGET(widget));
+#else
+    gtk_header_bar_pack_start(GTK_HEADER_BAR(header), GTK_WIDGET(widget));
+#endif
+#endif
 }
 
 void cadex_header_widget_end(void *header, void *widget) {
+#ifdef CADEX_HAS_ADW
+    #ifdef CADEX_HAS_ADW
+    adw_header_bar_pack_end(ADW_HEADER_BAR(header), GTK_WIDGET(widget));
+#else
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), GTK_WIDGET(widget));
+#endif
+#else
+    #ifdef CADEX_HAS_ADW
+    adw_header_bar_pack_end(ADW_HEADER_BAR(header), GTK_WIDGET(widget));
+#else
+    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), GTK_WIDGET(widget));
+#endif
+#endif
 }
 
 void cadex_button_set_text(void *button, const char *text) {
@@ -682,7 +959,19 @@ void *cadex_header_button_start(void *header, const char *text, cadex_simple_fn 
     simple->fn = fn;
     simple->user = user;
     g_signal_connect_data(button, "clicked", G_CALLBACK(on_button_clicked), simple, NULL, 0);
+#ifdef CADEX_HAS_ADW
+    #ifdef CADEX_HAS_ADW
+    adw_header_bar_pack_start(ADW_HEADER_BAR(header), button);
+#else
     gtk_header_bar_pack_start(GTK_HEADER_BAR(header), button);
+#endif
+#else
+    #ifdef CADEX_HAS_ADW
+    adw_header_bar_pack_start(ADW_HEADER_BAR(header), button);
+#else
+    gtk_header_bar_pack_start(GTK_HEADER_BAR(header), button);
+#endif
+#endif
     return button;
 }
 
@@ -1410,8 +1699,8 @@ void *cadex_text_view_with_gutter(void *view) {
     state->view = view;
     state->gutter = gutter;
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(gutter), on_gutter_draw, state, NULL);
-    gtk_box_append(box, gutter);
-    gtk_box_append(box, GTK_WIDGET(view));
+    gtk_box_append(GTK_BOX(box), gutter);
+    gtk_box_append(GTK_BOX(box), GTK_WIDGET(view));
     gtk_widget_set_hexpand(GTK_WIDGET(view), TRUE);
     gtk_widget_set_vexpand(GTK_WIDGET(view), TRUE);
     g_signal_connect(view, "map", G_CALLBACK(on_view_map), state);
@@ -1683,4 +1972,287 @@ void cadex_tray_start(void *window, void (*fn)(void *user), void *user) {
                            -1, NULL, NULL, NULL);
     if (sni) g_dbus_node_info_unref(sni);
     if (menu) g_dbus_node_info_unref(menu);
+}
+
+/* ---- Adwaita shell ---------------------------------------------------- */
+
+void *cadex_adw_window_split_new(void) {
+#ifdef CADEX_HAS_ADW
+    return adw_overlay_split_view_new();
+#else
+    return NULL;
+#endif
+}
+
+void cadex_adw_split_set_sidebar(void *split, void *sidebar) {
+#ifdef CADEX_HAS_ADW
+    adw_overlay_split_view_set_sidebar(ADW_OVERLAY_SPLIT_VIEW(split), GTK_WIDGET(sidebar));
+#else
+    (void)split; (void)sidebar;
+#endif
+}
+
+void cadex_adw_split_set_content(void *split, void *content) {
+#ifdef CADEX_HAS_ADW
+    adw_overlay_split_view_set_content(ADW_OVERLAY_SPLIT_VIEW(split), GTK_WIDGET(content));
+#else
+    (void)split; (void)content;
+#endif
+}
+
+void cadex_adw_split_set_show_sidebar(void *split, int show) {
+#ifdef CADEX_HAS_ADW
+    adw_overlay_split_view_set_show_sidebar(ADW_OVERLAY_SPLIT_VIEW(split), show ? TRUE : FALSE);
+#else
+    (void)split; (void)show;
+#endif
+}
+
+int cadex_adw_split_get_show_sidebar(void *split) {
+#ifdef CADEX_HAS_ADW
+    return adw_overlay_split_view_get_show_sidebar(ADW_OVERLAY_SPLIT_VIEW(split)) ? 1 : 0;
+#else
+    (void)split;
+    return 0;
+#endif
+}
+
+void *cadex_adw_view_switcher_new(void *stack) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *switcher = adw_view_switcher_new();
+    adw_view_switcher_set_stack(ADW_VIEW_SWITCHER(switcher), ADW_VIEW_STACK(stack));
+    return switcher;
+#else
+    (void)stack;
+    return NULL;
+#endif
+}
+
+void *cadex_adw_toast_overlay_new(void) {
+#ifdef CADEX_HAS_ADW
+    return adw_toast_overlay_new();
+#else
+    return NULL;
+#endif
+}
+
+void cadex_adw_toast_overlay_set_child(void *overlay, void *child) {
+#ifdef CADEX_HAS_ADW
+    adw_toast_overlay_set_child(ADW_TOAST_OVERLAY(overlay), GTK_WIDGET(child));
+#else
+    (void)overlay; (void)child;
+#endif
+}
+
+void cadex_adw_toast(void *overlay, const char *text) {
+#ifdef CADEX_HAS_ADW
+    if (!overlay) return;
+    adw_toast_overlay_add_toast(ADW_TOAST_OVERLAY(overlay), adw_toast_new(text));
+#else
+    (void)overlay; (void)text;
+#endif
+}
+
+void *cadex_adw_window_title_new(const char *title, const char *subtitle) {
+#ifdef CADEX_HAS_ADW
+    return adw_window_title_new(title, subtitle);
+#else
+    return NULL;
+#endif
+}
+
+void cadex_adw_window_title_set(void *title, const char *text, const char *subtitle) {
+#ifdef CADEX_HAS_ADW
+    adw_window_title_set_title(ADW_WINDOW_TITLE(title), text);
+    adw_window_title_set_subtitle(ADW_WINDOW_TITLE(title), subtitle);
+#else
+    (void)title; (void)text; (void)subtitle;
+#endif
+}
+
+void *cadex_adw_icon_button(const char *icon, void (*fn)(void *), void *user) {
+    GtkWidget *button = gtk_button_new_from_icon_name(icon);
+    gtk_widget_add_css_class(button, "flat");
+    if (fn) {
+        CadexSimple *simple = g_new0(CadexSimple, 1);
+        simple->fn = fn;
+        simple->user = user;
+        g_signal_connect_data(button, "clicked", G_CALLBACK(on_button_clicked), simple, NULL, 0);
+    }
+    return button;
+}
+
+void *cadex_adw_menu_button_new(const char *icon, void *popover) {
+    GtkWidget *button = gtk_menu_button_new();
+    gtk_menu_button_set_icon_name(GTK_MENU_BUTTON(button), icon);
+    gtk_widget_add_css_class(button, "flat");
+    if (popover) gtk_menu_button_set_popover(GTK_MENU_BUTTON(button), GTK_WIDGET(popover));
+    return button;
+}
+
+void *cadex_adw_popover_new(void) {
+    return gtk_popover_new();
+}
+
+void cadex_adw_popover_set_child(void *popover, void *child) {
+    gtk_popover_set_child(GTK_POPOVER(popover), GTK_WIDGET(child));
+}
+
+void *cadex_adw_nav_row_new(const char *icon, const char *title) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *row = adw_action_row_new();
+    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(row), title);
+    GtkWidget *image = gtk_image_new_from_icon_name(icon);
+    adw_action_row_add_prefix(ADW_ACTION_ROW(row), image);
+    gtk_list_box_row_set_activatable(GTK_LIST_BOX_ROW(row), TRUE);
+    return row;
+#else
+    (void)icon;
+    GtkWidget *row = gtk_list_box_row_new();
+    GtkWidget *label = gtk_label_new(title);
+    gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), label);
+    return row;
+#endif
+}
+
+void *cadex_adw_action_row_new(const char *title, const char *subtitle) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *row = adw_action_row_new();
+    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(row), title);
+    if (subtitle) adw_action_row_set_subtitle(ADW_ACTION_ROW(row), subtitle);
+    return row;
+#else
+    (void)subtitle;
+    return gtk_list_box_row_new();
+#endif
+}
+
+void cadex_adw_action_row_add_prefix(void *row, void *widget) {
+#ifdef CADEX_HAS_ADW
+    adw_action_row_add_prefix(ADW_ACTION_ROW(row), GTK_WIDGET(widget));
+#else
+    (void)row; (void)widget;
+#endif
+}
+
+void cadex_adw_action_row_add_suffix(void *row, void *widget) {
+#ifdef CADEX_HAS_ADW
+    adw_action_row_add_suffix(ADW_ACTION_ROW(row), GTK_WIDGET(widget));
+#else
+    (void)row; (void)widget;
+#endif
+}
+
+void *cadex_adw_preferences_window_new(void *parent, const char *title) {
+#ifdef CADEX_HAS_ADW
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    GtkWidget *window = adw_preferences_window_new();
+    G_GNUC_END_IGNORE_DEPRECATIONS
+    gtk_window_set_title(GTK_WINDOW(window), title);
+    if (parent) gtk_window_set_transient_for(GTK_WINDOW(window), GTK_WINDOW(parent));
+    gtk_window_set_default_size(GTK_WINDOW(window), 640, 560);
+    return window;
+#else
+    (void)parent; (void)title;
+    return NULL;
+#endif
+}
+
+void *cadex_adw_preferences_page_new(void) {
+#ifdef CADEX_HAS_ADW
+    return adw_preferences_page_new();
+#else
+    return NULL;
+#endif
+}
+
+void *cadex_adw_preferences_group_new(const char *title) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *group = adw_preferences_group_new();
+    adw_preferences_group_set_title(ADW_PREFERENCES_GROUP(group), title);
+    return group;
+#else
+    (void)title;
+    return NULL;
+#endif
+}
+
+void cadex_adw_preferences_group_add(void *group, void *row) {
+#ifdef CADEX_HAS_ADW
+    adw_preferences_group_add(ADW_PREFERENCES_GROUP(group), GTK_WIDGET(row));
+#else
+    (void)group; (void)row;
+#endif
+}
+
+void cadex_adw_preferences_page_add(void *page, void *group) {
+#ifdef CADEX_HAS_ADW
+    adw_preferences_page_add(ADW_PREFERENCES_PAGE(page), ADW_PREFERENCES_GROUP(group));
+#else
+    (void)page; (void)group;
+#endif
+}
+
+void cadex_adw_preferences_window_add(void *window, void *page) {
+#ifdef CADEX_HAS_ADW
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    adw_preferences_window_add(ADW_PREFERENCES_WINDOW(window), ADW_PREFERENCES_PAGE(page));
+    G_GNUC_END_IGNORE_DEPRECATIONS
+#else
+    (void)window; (void)page;
+#endif
+}
+
+void *cadex_adw_status_page_new(const char *icon, const char *title, const char *description) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *page = adw_status_page_new();
+    adw_status_page_set_icon_name(ADW_STATUS_PAGE(page), icon);
+    adw_status_page_set_title(ADW_STATUS_PAGE(page), title);
+    adw_status_page_set_description(ADW_STATUS_PAGE(page), description);
+    return page;
+#else
+    (void)icon; (void)title; (void)description;
+    return NULL;
+#endif
+}
+
+void *cadex_adw_clamp_new(int max_width) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *clamp = adw_clamp_new();
+    adw_clamp_set_maximum_size(ADW_CLAMP(clamp), max_width);
+    return clamp;
+#else
+    (void)max_width;
+    return NULL;
+#endif
+}
+
+void cadex_widget_set_tooltip(void *widget, const char *text) {
+    gtk_widget_set_tooltip_text(GTK_WIDGET(widget), text);
+}
+
+void cadex_widget_set_flat(void *widget) {
+    gtk_widget_add_css_class(GTK_WIDGET(widget), "flat");
+}
+
+void cadex_listbox_append_widget(void *box, void *widget) {
+    gtk_list_box_append(GTK_LIST_BOX(box), GTK_WIDGET(widget));
+}
+
+void cadex_listbox_append_action(void *box, const char *icon, const char *title, const char *subtitle) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *row = adw_action_row_new();
+    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(row), title);
+    if (subtitle && subtitle[0]) adw_action_row_set_subtitle(ADW_ACTION_ROW(row), subtitle);
+    if (icon && icon[0]) adw_action_row_add_prefix(ADW_ACTION_ROW(row), gtk_image_new_from_icon_name(icon));
+    gtk_list_box_append(GTK_LIST_BOX(box), row);
+#else
+    (void)icon; (void)subtitle;
+    gtk_list_box_append(GTK_LIST_BOX(box), gtk_label_new(title));
+#endif
+}
+
+void cadex_listbox_select(void *box, int index) {
+    GtkListBoxRow *row = gtk_list_box_get_row_at_index(GTK_LIST_BOX(box), index);
+    if (row) gtk_list_box_select_row(GTK_LIST_BOX(box), row);
 }

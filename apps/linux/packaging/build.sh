@@ -73,7 +73,7 @@ Section: utils
 Priority: optional
 Architecture: amd64
 Installed-Size: $installed_size
-Depends: libgtk-4-1 (>= 4.14), libgstreamer1.0-0, libgstreamer-plugins-base1.0-0, fonts-dejavu-core
+Depends: libgtk-4-1 (>= 4.14), libadwaita-1-0 (>= 1.4), libgstreamer1.0-0, libgstreamer-plugins-base1.0-0, fonts-dejavu-core
 Recommends: libwebkitgtk-6.0-4
 Maintainer: Carlos Teixeira <c4duz@users.noreply.github.com>
 Homepage: https://github.com/c4duZ/cadex
@@ -102,6 +102,7 @@ License: MIT
 URL: https://github.com/c4duZ/cadex
 BuildArch: x86_64
 Requires: gtk4 >= 4.14
+Requires: libadwaita
 Recommends: webkitgtk6.0
 Requires: gstreamer1
 Requires: gstreamer1-plugins-base

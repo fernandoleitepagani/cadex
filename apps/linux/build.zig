@@ -23,9 +23,15 @@ pub fn build(b: *std.Build) void {
     var webkit_code: u8 = 0;
     _ = b.runAllowFail(&.{ "pkg-config", "--exists", "webkitgtk-6.0" }, &webkit_code, .ignore) catch "";
     const has_webkit = webkit_code == 0;
+    var adw_code: u8 = 0;
+    _ = b.runAllowFail(&.{ "pkg-config", "--exists", "libadwaita-1" }, &adw_code, .ignore) catch "";
+    if (adw_code != 0) @panic("libadwaita-1 is required (install libadwaita-devel)");
     const shim_module = b.createModule(.{ .target = target, .optimize = optimize, .link_libc = true });
     shim_module.addCSourceFile(.{ .file = b.path("shared/system/gtk_shim.c"), .flags = &.{"-std=c11"} });
     for (include_paths) |path| shim_module.addIncludePath(.{ .cwd_relative = path });
+    shim_module.addCMacro("CADEX_HAS_ADW", "1");
+    const adw_includes = pkgFlags(b, &.{ "pkg-config", "--cflags-only-I", "libadwaita-1" }, "-I");
+    for (adw_includes) |path| shim_module.addIncludePath(.{ .cwd_relative = path });
     if (has_webkit) {
         shim_module.addCMacro("CADEX_HAS_WEBKIT", "1");
         const webkit_includes = pkgFlags(b, &.{ "pkg-config", "--cflags-only-I", "webkitgtk-6.0" }, "-I");
@@ -83,6 +89,10 @@ pub fn build(b: *std.Build) void {
     root.addLibraryPath(.{ .cwd_relative = std.mem.trimEnd(u8, system_libdir, "\n") });
     for (lib_paths) |path| root.addLibraryPath(.{ .cwd_relative = path });
     for (lib_names) |name| root.linkSystemLibrary(name, .{});
+    const adw_lib_paths = pkgFlags(b, &.{ "pkg-config", "--libs-only-L", "libadwaita-1" }, "-L");
+    const adw_lib_names = pkgFlags(b, &.{ "pkg-config", "--libs-only-l", "libadwaita-1" }, "-l");
+    for (adw_lib_paths) |path| root.addLibraryPath(.{ .cwd_relative = path });
+    for (adw_lib_names) |name| root.linkSystemLibrary(name, .{});
     if (has_webkit) {
         const webkit_lib_paths = pkgFlags(b, &.{ "pkg-config", "--libs-only-L", "webkitgtk-6.0" }, "-L");
         const webkit_lib_names = pkgFlags(b, &.{ "pkg-config", "--libs-only-l", "webkitgtk-6.0" }, "-l");
