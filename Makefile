@@ -1,4 +1,4 @@
-.PHONY: check manifests core core-test linux-core linux-core-test linux-check macos-test app run relink package perf windows-core windows-core-test windows-app windows-run windows-app-test windows-package
+.PHONY: check manifests core core-test linux-core linux-core-test linux-check linux-app linux-run macos-test app run relink package perf windows-core windows-core-test windows-app windows-run windows-app-test windows-package
 
 # Run before handing work over: manifests, core tests, app tests, and the
 # Windows build (it cannot run here, but it must keep compiling).
@@ -25,6 +25,13 @@ linux-core-test:
 	@cd core && zig build test
 
 linux-check: manifests linux-core-test
+
+# The GTK4 app; needs gtk4-devel (Fedora) or libgtk-4-dev (Ubuntu).
+linux-app: linux-core
+	@cd apps/linux && zig build
+
+linux-run: linux-app
+	@cd apps/linux && zig build run
 
 # swift build does not notice a new libcadex.a: drop the linked binaries so
 # they link again (tests ran against an old core, 2026-10-19).
