@@ -1074,6 +1074,7 @@ fn buildSearchPage(app: *App) !*anyopaque {
     const page = c.cadex_box_new() orelse return error.GtkFailed;
     c.cadex_widget_set_margins(page, 18, 18, 12, 18);
     const title = c.cadex_label_new("Search") orelse return error.GtkFailed;
+    c.cadex_label_set_xalign(title, 0);
     c.cadex_widget_add_class(title, "title-4");
     c.cadex_widget_set_margins(title, 0, 0, 0, 8);
     c.cadex_box_append(page, title);

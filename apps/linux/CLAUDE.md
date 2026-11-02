@@ -84,7 +84,7 @@
   reiniciar; branch/init; renomear/lixeira; side-by-side diff.
 - `make linux-package`; conferir `dist/AppDir/cadex.png`, o `.deb` (`ar t`) e o `.rpm`
   (`rpm -qip`); rodar o AppImage com `APPIMAGE_EXTRACT_AND_RUN=1`.
-- Medir RSS com o binário ReleaseFast; hoje ~244 MB com um terminal e ~276 MB com um
+- Medir RSS com o binário ReleaseFast; hoje ~244 MB com um terminal e ~277 MB com um
   documento WebKit aberto (a casca libadwaita soma ~28 MB).
 
 ## Backlog restante
