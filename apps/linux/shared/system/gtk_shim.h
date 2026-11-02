@@ -149,6 +149,8 @@ void cadex_window_hide_on_close(void *window);
 void cadex_window_hide(void *window);
 void cadex_widget_set_size(void *widget, int width, int height);
 void cadex_widget_set_margins(void *widget, int start, int end, int top, int bottom);
+void *cadex_image_new(const char *icon);
+void cadex_widget_clip(void *widget);
 void cadex_widget_add_class(void *widget, const char *name);
 void cadex_css_apply(const char *css);
 void cadex_set_dark(int dark);
@@ -215,7 +217,12 @@ int cadex_window_is_active(void *window);
 
 /* ---- Adwaita shell (UI rewrite) --------------------------------------- */
 
+void cadex_window_set_bottom_bar(void *window, void *widget);
+void *cadex_adw_tab_bar_new(void);
+void cadex_tab_bar_set_notebook(void *bar, void *notebook);
+void cadex_header_set_title_widget(void *header, void *widget);
 void *cadex_adw_window_split_new(void);
+void cadex_adw_split_set_sidebar_width(void *split, int width);
 void cadex_adw_split_set_sidebar(void *split, void *sidebar);
 void cadex_adw_split_set_content(void *split, void *content);
 void cadex_adw_split_set_show_sidebar(void *split, int show);

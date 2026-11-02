@@ -173,19 +173,28 @@ void cadex_app_quit(void *app) {
 void *cadex_window_new(void *app, const char *title, int width, int height) {
 #ifdef CADEX_HAS_ADW
     GtkWidget *window = adw_application_window_new(GTK_APPLICATION(app));
-#else
-    GtkWidget *window = gtk_application_window_new(GTK_APPLICATION(app));
-#endif
-    gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
-#ifdef CADEX_HAS_ADW
     GtkWidget *toolbar = adw_toolbar_view_new();
     adw_application_window_set_content(ADW_APPLICATION_WINDOW(window), toolbar);
     g_object_set_data(G_OBJECT(window), "cadex-toolbar", toolbar);
+    gtk_widget_add_css_class(window, "cadex-window");
+#else
+    GtkWidget *window = gtk_application_window_new(GTK_APPLICATION(app));
 #endif
     gtk_window_set_title(GTK_WINDOW(window), title);
     gtk_window_set_default_size(GTK_WINDOW(window), width, height);
     gtk_window_set_resizable(GTK_WINDOW(window), TRUE);
     return window;
+}
+
+void cadex_window_set_bottom_bar(void *window, void *widget) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *toolbar = g_object_get_data(G_OBJECT(window), "cadex-toolbar");
+    if (toolbar && widget) {
+        adw_toolbar_view_add_bottom_bar(ADW_TOOLBAR_VIEW(toolbar), GTK_WIDGET(widget));
+    }
+#else
+    (void)window; (void)widget;
+#endif
 }
 
 void *cadex_window_box(void *window) {
@@ -245,16 +254,30 @@ void cadex_window_on_close(void *window, cadex_close_fn fn, void *user) {
 void *cadex_header_new(void *window) {
 #ifdef CADEX_HAS_ADW
     GtkWidget *toolbar = g_object_get_data(G_OBJECT(window), "cadex-toolbar");
+    GtkWidget *header = adw_header_bar_new();
+    gtk_widget_add_css_class(header, "cadex-titlebar");
+    gtk_widget_set_visible(header, TRUE);
     if (toolbar) {
-        GtkWidget *header = adw_header_bar_new();
         adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(toolbar), header);
         return header;
     }
-#endif
+    gtk_window_set_titlebar(GTK_WINDOW(window), header);
+    return header;
+#else
     GtkWidget *header = gtk_header_bar_new();
+    gtk_widget_add_css_class(header, "cadex-titlebar");
     gtk_widget_set_visible(header, TRUE);
     gtk_window_set_titlebar(GTK_WINDOW(window), header);
     return header;
+#endif
+}
+
+void cadex_header_set_title_widget(void *header, void *widget) {
+#ifdef CADEX_HAS_ADW
+    adw_header_bar_set_title_widget(ADW_HEADER_BAR(header), GTK_WIDGET(widget));
+#else
+    gtk_header_bar_set_title_widget(GTK_HEADER_BAR(header), GTK_WIDGET(widget));
+#endif
 }
 
 void *cadex_header_title(void *header, const char *text) {
@@ -302,17 +325,9 @@ void *cadex_header_button(void *header, const char *text, cadex_simple_fn fn, vo
     simple->user = user;
     g_signal_connect_data(button, "clicked", G_CALLBACK(on_button_clicked), simple, NULL, 0);
 #ifdef CADEX_HAS_ADW
-    #ifdef CADEX_HAS_ADW
     adw_header_bar_pack_end(ADW_HEADER_BAR(header), button);
 #else
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), button);
-#endif
-#else
-    #ifdef CADEX_HAS_ADW
-    adw_header_bar_pack_end(ADW_HEADER_BAR(header), button);
-#else
-    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), button);
-#endif
 #endif
     return button;
 }
@@ -621,7 +636,8 @@ void *cadex_box_new_h(int spacing) {
 
 #ifdef CADEX_HAS_ADW
 static GtkWidget *notebook_view(void *notebook) {
-    return g_object_get_data(G_OBJECT(notebook), "cadex-tab-view");
+    GtkWidget *view = g_object_get_data(G_OBJECT(notebook), "cadex-tab-view");
+    return view ? view : GTK_WIDGET(notebook);
 }
 
 static const char *tab_label_text(GtkWidget *label) {
@@ -641,22 +657,35 @@ static int page_position(AdwTabView *view, AdwTabPage *page) {
 }
 #endif
 
-void *cadex_notebook_new(void) {
+void *cadex_adw_tab_bar_new(void) {
 #ifdef CADEX_HAS_ADW
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_widget_set_vexpand(box, TRUE);
-    gtk_widget_set_hexpand(box, TRUE);
-    GtkWidget *view = GTK_WIDGET(adw_tab_view_new());
     GtkWidget *bar = GTK_WIDGET(adw_tab_bar_new());
-    adw_tab_bar_set_view(ADW_TAB_BAR(bar), ADW_TAB_VIEW(view));
-    adw_tab_bar_set_autohide(ADW_TAB_BAR(bar), TRUE);
+    adw_tab_bar_set_autohide(ADW_TAB_BAR(bar), FALSE);
     adw_tab_bar_set_expand_tabs(ADW_TAB_BAR(bar), FALSE);
     gtk_widget_set_hexpand(bar, TRUE);
-    gtk_box_append(GTK_BOX(box), bar);
+    gtk_widget_set_vexpand(bar, FALSE);
+    gtk_widget_add_css_class(bar, "cadex-tabbar");
+    return bar;
+#else
+    return NULL;
+#endif
+}
+
+void cadex_tab_bar_set_notebook(void *bar, void *notebook) {
+#ifdef CADEX_HAS_ADW
+    if (!bar || !notebook) return;
+    adw_tab_bar_set_view(ADW_TAB_BAR(bar), ADW_TAB_VIEW(notebook_view(notebook)));
+#else
+    (void)bar; (void)notebook;
+#endif
+}
+
+void *cadex_notebook_new(void) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *view = GTK_WIDGET(adw_tab_view_new());
     gtk_widget_set_vexpand(view, TRUE);
-    gtk_box_append(GTK_BOX(box), view);
-    g_object_set_data(G_OBJECT(box), "cadex-tab-view", view);
-    return box;
+    gtk_widget_set_hexpand(view, TRUE);
+    return view;
 #else
     GtkWidget *notebook = gtk_notebook_new();
     gtk_notebook_set_show_border(GTK_NOTEBOOK(notebook), FALSE);
@@ -919,33 +948,17 @@ void cadex_text_set_font(const char *font) {
 
 void cadex_header_widget_start(void *header, void *widget) {
 #ifdef CADEX_HAS_ADW
-    #ifdef CADEX_HAS_ADW
     adw_header_bar_pack_start(ADW_HEADER_BAR(header), GTK_WIDGET(widget));
 #else
     gtk_header_bar_pack_start(GTK_HEADER_BAR(header), GTK_WIDGET(widget));
-#endif
-#else
-    #ifdef CADEX_HAS_ADW
-    adw_header_bar_pack_start(ADW_HEADER_BAR(header), GTK_WIDGET(widget));
-#else
-    gtk_header_bar_pack_start(GTK_HEADER_BAR(header), GTK_WIDGET(widget));
-#endif
 #endif
 }
 
 void cadex_header_widget_end(void *header, void *widget) {
 #ifdef CADEX_HAS_ADW
-    #ifdef CADEX_HAS_ADW
     adw_header_bar_pack_end(ADW_HEADER_BAR(header), GTK_WIDGET(widget));
 #else
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), GTK_WIDGET(widget));
-#endif
-#else
-    #ifdef CADEX_HAS_ADW
-    adw_header_bar_pack_end(ADW_HEADER_BAR(header), GTK_WIDGET(widget));
-#else
-    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), GTK_WIDGET(widget));
-#endif
 #endif
 }
 
@@ -1113,7 +1126,19 @@ void cadex_switch_on_changed(void *sw, void (*fn)(void *user), void *user) {
 }
 
 void *cadex_window_new_dialog(void *parent, const char *title, int width, int height) {
+#ifdef CADEX_HAS_ADW
+    GtkWidget *window = adw_window_new();
+    GtkWidget *toolbar = adw_toolbar_view_new();
+    adw_window_set_content(ADW_WINDOW(window), toolbar);
+    g_object_set_data(G_OBJECT(window), "cadex-toolbar", toolbar);
+    GtkWidget *header = adw_header_bar_new();
+    gtk_widget_add_css_class(header, "cadex-titlebar");
+    gtk_widget_set_visible(header, TRUE);
+    adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(toolbar), header);
+    gtk_widget_add_css_class(window, "cadex-window");
+#else
     GtkWidget *window = gtk_window_new();
+#endif
     gtk_window_set_title(GTK_WINDOW(window), title);
     gtk_window_set_default_size(GTK_WINDOW(window), width, height);
     if (parent) {
@@ -1130,6 +1155,14 @@ void cadex_window_hide_on_close(void *window) {
 
 void cadex_window_hide(void *window) {
     gtk_widget_set_visible(GTK_WIDGET(window), FALSE);
+}
+
+void *cadex_image_new(const char *icon) {
+    return gtk_image_new_from_icon_name(icon);
+}
+
+void cadex_widget_clip(void *widget) {
+    gtk_widget_set_overflow(GTK_WIDGET(widget), GTK_OVERFLOW_HIDDEN);
 }
 
 void cadex_widget_set_margins(void *widget, int start, int end, int top, int bottom) {
@@ -1158,12 +1191,19 @@ void cadex_css_apply(const char *css) {
     }
     cadex_css = gtk_css_provider_new();
     gtk_css_provider_load_from_string(cadex_css, css);
-    gtk_style_context_add_provider_for_display(display, GTK_STYLE_PROVIDER(cadex_css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    gtk_style_context_add_provider_for_display(display, GTK_STYLE_PROVIDER(cadex_css), GTK_STYLE_PROVIDER_PRIORITY_USER);
 }
 
 void cadex_set_dark(int dark) {
     GtkSettings *settings = gtk_settings_get_default();
     if (settings) g_object_set(settings, "gtk-application-prefer-dark-theme", dark ? TRUE : FALSE, NULL);
+#ifdef CADEX_HAS_ADW
+    AdwStyleManager *manager = adw_style_manager_get_default();
+    if (manager) {
+        adw_style_manager_set_color_scheme(manager,
+            dark ? ADW_COLOR_SCHEME_FORCE_DARK : ADW_COLOR_SCHEME_FORCE_LIGHT);
+    }
+#endif
 }
 
 void cadex_widget_unparent(void *widget) {
@@ -2009,6 +2049,15 @@ void cadex_adw_split_set_show_sidebar(void *split, int show) {
     adw_overlay_split_view_set_show_sidebar(ADW_OVERLAY_SPLIT_VIEW(split), show ? TRUE : FALSE);
 #else
     (void)split; (void)show;
+#endif
+}
+
+void cadex_adw_split_set_sidebar_width(void *split, int width) {
+#ifdef CADEX_HAS_ADW
+    adw_overlay_split_view_set_min_sidebar_width(ADW_OVERLAY_SPLIT_VIEW(split), (double)width);
+    adw_overlay_split_view_set_max_sidebar_width(ADW_OVERLAY_SPLIT_VIEW(split), (double)width);
+#else
+    (void)split; (void)width;
 #endif
 }
 

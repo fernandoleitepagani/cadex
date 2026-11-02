@@ -31,6 +31,19 @@ const CURSOR_BLOCK_HOLLOW: u8 = 3;
 const HORIZONTAL: c_int = 0;
 const VERTICAL: c_int = 1;
 
+const Interface = struct {
+    /// Title bar, the gaps between panels and the status bar.
+    chrome: u32,
+    /// The rounded sidebar and content panels.
+    panel: u32,
+    panel_border: u32,
+    tab_active: u32,
+    field: u32,
+    text: u32,
+    secondary_text: u32,
+    accent: u32,
+};
+
 const Theme = struct {
     name: []const u8,
     dark: bool,
@@ -39,9 +52,50 @@ const Theme = struct {
     cursor: u32,
     panel: u32,
     ansi: [16]u32,
+    /// The interface palette (macOS Cadex has one per theme). When absent the
+    /// palette is derived from the terminal colors.
+    interface: ?Interface = null,
 };
 
 const themes = [_]Theme{
+    .{
+        .name = "Caffeine",
+        .dark = true,
+        .background = 0x111111,
+        .foreground = 0xeeeeee,
+        .cursor = 0xffe0c2,
+        .panel = 0x111111,
+        .ansi = .{ 0x2c2c2c, 0xe54d2e, 0x87ba88, 0xffe0c1, 0x84aee3, 0xc897ca, 0x5dbcc1, 0xc6c6c6, 0xb4b4b4, 0xfe6545, 0x9dd19e, 0xfdebd9, 0x9ac4fb, 0xdfade1, 0x74d3d8, 0xeeeeee },
+        .interface = .{
+            .chrome = 0x222222,
+            .panel = 0x111111,
+            .panel_border = 0x201e18,
+            .tab_active = 0x534c45,
+            .field = 0x2e2e2e,
+            .text = 0xeeeeee,
+            .secondary_text = 0xb4b4b4,
+            .accent = 0xffe0c2,
+        },
+    },
+    .{
+        .name = "Caffeine Light",
+        .dark = false,
+        .background = 0xf9f9f9,
+        .foreground = 0x202020,
+        .cursor = 0x644a40,
+        .panel = 0xf9f9f9,
+        .ansi = .{ 0x202020, 0xe54d2e, 0x467748, 0xa48d6e, 0x446b9c, 0x835685, 0x1b777b, 0xc3c3c3, 0x646464, 0xcc3412, 0x326335, 0x8e785a, 0x315786, 0x6e4270, 0x0d6165, 0xe3e3e3 },
+        .interface = .{
+            .chrome = 0xefefef,
+            .panel = 0xf9f9f9,
+            .panel_border = 0xd8d8d8,
+            .tab_active = 0xd0cbc8,
+            .field = 0xe3e3e3,
+            .text = 0x202020,
+            .secondary_text = 0x646464,
+            .accent = 0x644a40,
+        },
+    },
     .{
         .name = "Cadex Dark",
         .dark = true,
@@ -134,8 +188,9 @@ const themes = [_]Theme{
     },
 };
 
-
 const theme_names = [_][*:0]const u8{
+    "Caffeine",
+    "Caffeine Light",
     "Cadex Dark",
     "Cadex Light",
     "Solarized Dark",
@@ -281,8 +336,9 @@ const AgentSession = struct {
 const App = struct {
     gpa: std.mem.Allocator,
     window: *anyopaque,
-    header_title: *anyopaque,
-    space_label: *anyopaque,
+    header: ?*anyopaque = null,
+    header_tabs: ?*anyopaque = null,
+    branch_label: ?*anyopaque = null,
     sidebar: *anyopaque,
     sidebar_stack: *anyopaque = undefined,
     content: *anyopaque = undefined,
@@ -293,14 +349,11 @@ const App = struct {
     nav_list: ?*anyopaque = null,
     space_switcher: ?*anyopaque = null,
     page: Page = .terminal,
-    sys_ram_label: ?*anyopaque = null,
-    sys_ports_label: ?*anyopaque = null,
-    sys_load_label: ?*anyopaque = null,
     spaces_stack: *anyopaque = undefined,
     find_entry: *anyopaque,
     find_open: bool = false,
     cwd_label: *anyopaque,
-    stats_label: *anyopaque = undefined,
+    stats_label: ?*anyopaque = null,
     tabs_label: *anyopaque,
     message_label: *anyopaque = undefined,
     spaces: std.ArrayList(*Space) = .empty,
@@ -399,6 +452,7 @@ const App = struct {
     // New file/folder prompt.
     prompt_window: ?*anyopaque = null,
     prompt_entry: ?*anyopaque = null,
+    prompt_create: ?*anyopaque = null,
     prompt_mode: PromptMode = .file,
     prompt_target: ?[:0]u8 = null,
 };
@@ -455,7 +509,6 @@ const commands = [_]Command{
     .{ .id = "settings.open", .title = "Settings", .keywords = "settings preferences theme font", .shortcut = "Ctrl+Shift+,", .run = cmdSettings },
     .{ .id = "app.quit", .title = "Quit Cadex", .keywords = "quit exit", .shortcut = "Ctrl+Shift+Q", .run = cmdQuit },
 };
-
 
 // Mac commands that have a Linux equivalent under a different id. They are
 // runnable (palette by id) but not listed twice in the palette.
@@ -615,8 +668,6 @@ fn create(launch: *Launch, gtk_app: *anyopaque) !void {
     app.* = .{
         .gpa = gpa,
         .window = undefined,
-        .header_title = undefined,
-        .space_label = undefined,
         .sidebar = undefined,
         .find_entry = undefined,
         .cwd_label = undefined,
@@ -654,10 +705,20 @@ fn create(launch: *Launch, gtk_app: *anyopaque) !void {
     c.cadex_stack_add(app.pages_stack.?, try buildAgentsPage(app), "agents");
     c.cadex_stack_add(app.pages_stack.?, try buildSshPage(app), "ssh");
     c.cadex_adw_split_set_content(app.split_view.?, app.pages_stack.?);
+    c.cadex_widget_add_class(app.pages_stack.?, "cadex-content-panel");
+    c.cadex_widget_set_margins(app.pages_stack.?, 3, 6, 6, 6);
+    c.cadex_widget_clip(app.pages_stack.?);
+
+    // Bottom status bar, like macOS Cadex.
+    const status = try buildStatusBar(app);
+    c.cadex_window_set_bottom_bar(app.window, status);
 
     // Sidebar: app title, project name, navigation rows.
     app.sidebar = c.cadex_box_new() orelse return error.GtkFailed;
-    c.cadex_widget_set_margins(app.sidebar, 6, 6, 8, 8);
+    c.cadex_widget_add_class(app.sidebar, "cadex-sidebar-panel");
+    c.cadex_widget_set_margins(app.sidebar, 6, 3, 6, 6);
+    c.cadex_widget_set_size(app.sidebar, 240, -1);
+    c.cadex_widget_clip(app.sidebar);
     const sidebar_title = c.cadex_label_new("Cadex") orelse return error.GtkFailed;
     c.cadex_widget_add_class(sidebar_title, "title-4");
     c.cadex_label_set_xalign(sidebar_title, 0);
@@ -677,7 +738,7 @@ fn create(launch: *Launch, gtk_app: *anyopaque) !void {
         .{ .icon = "utilities-terminal-symbolic", .label = "Terminal" },
         .{ .icon = "folder-symbolic", .label = "Files" },
         .{ .icon = "system-search-symbolic", .label = "Search" },
-        .{ .icon = "text-x-generic-symbolic", .label = "Git" },
+        .{ .icon = "view-list-symbolic", .label = "Git" },
         .{ .icon = "document-open-recent-symbolic", .label = "History" },
         .{ .icon = "system-run-symbolic", .label = "Agents" },
         .{ .icon = "network-server-symbolic", .label = "SSH" },
@@ -692,42 +753,26 @@ fn create(launch: *Launch, gtk_app: *anyopaque) !void {
     c.cadex_box_append(app.sidebar, app.nav_list.?);
     c.cadex_widget_expand(app.sidebar);
     c.cadex_adw_split_set_sidebar(app.split_view.?, app.sidebar);
+    c.cadex_adw_split_set_sidebar_width(app.split_view.?, 240);
     c.cadex_adw_split_set_show_sidebar(app.split_view.?, 1);
 
-    // Header: sidebar toggle, title, spaces, search, new tab, system, menu.
+    // Integrated top bar: controls, the current space's tabs and actions,
+    // all in one slim row (the macOS Cadex title bar).
     const header = c.cadex_header_new(app.window) orelse return error.GtkFailed;
-    const sidebar_button = c.cadex_adw_icon_button("view-sidebar-symbolic", sidebarClicked, app) orelse return error.GtkFailed;
+    app.header = header;
+    const controls = c.cadex_box_new_h(4) orelse return error.GtkFailed;
+    const sidebar_button = c.cadex_adw_icon_button("sidebar-show-symbolic", sidebarClicked, app) orelse return error.GtkFailed;
     c.cadex_widget_set_tooltip(sidebar_button, "Toggle sidebar");
-    c.cadex_header_widget_start(header, sidebar_button);
-    app.header_title = c.cadex_header_title(header, "Cadex") orelse return error.GtkFailed;
-
-    app.space_switcher = c.cadex_adw_view_switcher_new(app.spaces_stack) orelse return error.GtkFailed;
-    c.cadex_header_widget_end(header, app.space_switcher.?);
-
+    c.cadex_box_append(controls, sidebar_button);
     const search_button = c.cadex_adw_icon_button("system-search-symbolic", searchPageClicked, app) orelse return error.GtkFailed;
     c.cadex_widget_set_tooltip(search_button, "Search files and content");
-    c.cadex_header_widget_end(header, search_button);
-    const new_tab_button = c.cadex_adw_icon_button("tab-new-symbolic", newTabClicked, app) orelse return error.GtkFailed;
-    c.cadex_widget_set_tooltip(new_tab_button, "New terminal tab");
-    c.cadex_header_widget_end(header, new_tab_button);
+    c.cadex_box_append(controls, search_button);
+    app.space_switcher = c.cadex_adw_view_switcher_new(app.spaces_stack) orelse return error.GtkFailed;
+    c.cadex_box_append(controls, app.space_switcher.?);
+    c.cadex_header_widget_start(header, controls);
 
-    // System popover (moved off the permanent status bar).
-    const system_popover = c.cadex_adw_popover_new() orelse return error.GtkFailed;
-    const system_box = c.cadex_box_new() orelse return error.GtkFailed;
-    c.cadex_widget_set_margins(system_box, 12, 12, 10, 10);
-    const system_title = c.cadex_label_new("System") orelse return error.GtkFailed;
-    c.cadex_widget_add_class(system_title, "heading");
-    c.cadex_box_append(system_box, system_title);
-    app.sys_ram_label = c.cadex_label_new("RAM —") orelse return error.GtkFailed;
-    app.sys_ports_label = c.cadex_label_new("Ports —") orelse return error.GtkFailed;
-    app.sys_load_label = c.cadex_label_new("Load —") orelse return error.GtkFailed;
-    c.cadex_box_append(system_box, app.sys_ram_label);
-    c.cadex_box_append(system_box, app.sys_ports_label);
-    c.cadex_box_append(system_box, app.sys_load_label);
-    c.cadex_adw_popover_set_child(system_popover, system_box);
-    const system_button = c.cadex_adw_menu_button_new("utilities-system-monitor-symbolic", system_popover) orelse return error.GtkFailed;
-    c.cadex_widget_set_tooltip(system_button, "System status");
-    c.cadex_header_widget_end(header, system_button);
+    app.header_tabs = c.cadex_adw_tab_bar_new();
+    if (app.header_tabs) |bar| c.cadex_header_set_title_widget(header, bar);
 
     // Primary menu.
     const menu_popover = c.cadex_adw_popover_new() orelse return error.GtkFailed;
@@ -755,6 +800,9 @@ fn create(launch: *Launch, gtk_app: *anyopaque) !void {
     const menu_button = c.cadex_adw_menu_button_new("open-menu-symbolic", menu_popover) orelse return error.GtkFailed;
     c.cadex_widget_set_tooltip(menu_button, "Main menu");
     c.cadex_header_widget_end(header, menu_button);
+    const new_tab_button = c.cadex_adw_icon_button("list-add-symbolic", newTabClicked, app) orelse return error.GtkFailed;
+    c.cadex_widget_set_tooltip(new_tab_button, "New terminal tab");
+    c.cadex_header_widget_end(header, new_tab_button);
 
     c.cadex_adw_toast_overlay_set_child(app.toast_overlay.?, app.split_view.?);
     c.cadex_window_child(app.window, app.toast_overlay.?);
@@ -859,6 +907,7 @@ fn onSpaceChanged(name: [*c]const u8, user: ?*anyopaque) callconv(.c) void {
         if (!std.mem.eql(u8, space.name, text)) continue;
         if (index == app.space_index) return;
         app.space_index = index;
+        updateHeaderTabs(app, space);
         if (space.tabs.items.len > 0) {
             const page: usize = @intCast(@max(0, c.cadex_notebook_current(space.notebook)));
             activateTab(app, space.tabs.items[@min(page, space.tabs.items.len - 1)]);
@@ -948,6 +997,36 @@ fn workspaceChangedIdle(user: ?*anyopaque) callconv(.c) void {
     refreshGit(app);
 }
 
+fn buildStatusBar(app: *App) !*anyopaque {
+    const bar = c.cadex_box_new_h(8) orelse return error.GtkFailed;
+    c.cadex_widget_add_class(bar, "cadex-status");
+
+    const folder_icon = c.cadex_image_new("folder-symbolic") orelse return error.GtkFailed;
+    c.cadex_box_append(bar, folder_icon);
+    app.cwd_label = c.cadex_label_new("") orelse return error.GtkFailed;
+    c.cadex_widget_add_class(app.cwd_label, "cadex-status-strong");
+    c.cadex_label_ellipsize(app.cwd_label);
+    c.cadex_widget_set_size(app.cwd_label, 220, -1);
+    c.cadex_box_append(bar, app.cwd_label);
+
+    const branch_icon = c.cadex_image_new("view-list-symbolic") orelse return error.GtkFailed;
+    c.cadex_box_append(bar, branch_icon);
+    const branch = c.cadex_label_new("") orelse return error.GtkFailed;
+    app.branch_label = branch;
+    c.cadex_label_ellipsize(branch);
+    c.cadex_box_append(bar, branch);
+
+    const spacer = c.cadex_box_new() orelse return error.GtkFailed;
+    c.cadex_widget_expand_h(spacer);
+    c.cadex_box_append(bar, spacer);
+
+    app.stats_label = c.cadex_label_new("") orelse return error.GtkFailed;
+    c.cadex_box_append(bar, app.stats_label);
+    app.tabs_label = c.cadex_label_new("") orelse return error.GtkFailed;
+    c.cadex_box_append(bar, app.tabs_label);
+    return bar;
+}
+
 fn buildFilesPage(app: *App) !*anyopaque {
     const page = c.cadex_box_new() orelse return error.GtkFailed;
     c.cadex_widget_set_margins(page, 18, 18, 12, 18);
@@ -972,7 +1051,7 @@ fn buildFilesPage(app: *App) !*anyopaque {
     const new_folder = c.cadex_adw_icon_button("folder-new-symbolic", newFolderClicked, app) orelse return error.GtkFailed;
     c.cadex_widget_set_tooltip(new_folder, "New folder");
     c.cadex_box_append(actions, new_folder);
-    const rename = c.cadex_adw_icon_button("edit-rename-symbolic", filesRenameClicked, app) orelse return error.GtkFailed;
+    const rename = c.cadex_adw_icon_button("document-edit-symbolic", filesRenameClicked, app) orelse return error.GtkFailed;
     c.cadex_widget_set_tooltip(rename, "Rename");
     c.cadex_box_append(actions, rename);
     const trash = c.cadex_adw_icon_button("user-trash-symbolic", filesDeleteClicked, app) orelse return error.GtkFailed;
@@ -1653,6 +1732,13 @@ fn promptOpen(app: *App, mode: PromptMode) void {
         .rename => "Rename",
         .url => "Open URL preview",
     });
+    if (app.prompt_create) |button| {
+        c.cadex_button_set_text(button, switch (mode) {
+            .file, .folder => "Create",
+            .rename => "Rename",
+            .url => "Open",
+        });
+    }
     if (mode == .rename) {
         if (app.prompt_target) |target| {
             const base_z = app.gpa.dupeZ(u8, std.fs.path.basename(target)) catch return;
@@ -1676,12 +1762,15 @@ fn createPrompt(app: *App) void {
     c.cadex_box_append(box, entry);
     const actions = c.cadex_box_new_h(6) orelse return;
     c.cadex_widget_set_margins(actions, 0, 0, 10, 0);
-    c.cadex_box_append(actions, c.cadex_button_new("Create", promptCreate, app) orelse return);
+    const create_button = c.cadex_button_new("Create", promptCreate, app) orelse return;
+    c.cadex_box_append(actions, create_button);
+    c.cadex_widget_add_class(create_button, "suggested-action");
     c.cadex_box_append(actions, c.cadex_button_new("Cancel", promptCancel, app) orelse return);
     c.cadex_box_append(box, actions);
     c.cadex_window_child(window, box);
     app.prompt_window = window;
     app.prompt_entry = entry;
+    app.prompt_create = create_button;
 }
 
 fn promptCreate(user: ?*anyopaque) callconv(.c) void {
@@ -1913,17 +2002,15 @@ fn buildPreviewHtml(app: *App, text: []const u8) ![:0]u8 {
     }
     defer core.cadex_free(@ptrCast(body.?));
     const theme = themes[app.theme_index];
-    const head = try std.fmt.allocPrint(app.gpa,
-        "<!doctype html><html><head><meta charset=\"utf-8\"><style>" ++
-            "body{{background:#{x:0>6};color:#{x:0>6};font-family:system-ui,sans-serif;" ++
-            "font-size:15px;line-height:1.55;padding:18px;margin:0;}}" ++
-            "a{{color:#4fc1ff;}}pre{{background:#{x:0>6};padding:12px;border-radius:6px;overflow:auto;}}" ++
-            "code{{background:#{x:0>6};padding:1px 4px;border-radius:4px;font-family:monospace;}}" ++
-            "pre code{{background:transparent;padding:0;}}" ++
-            "blockquote{{border-left:3px solid #4fc1ff;margin-left:0;padding-left:12px;color:#9aa0a6;}}" ++
-            "table{{border-collapse:collapse;}}td,th{{border:1px solid #555;padding:4px 8px;}}" ++
-            "img{{max-width:100%;}}</style></head><body>",
-        .{ theme.background, theme.foreground, theme.panel, theme.panel });
+    const head = try std.fmt.allocPrint(app.gpa, "<!doctype html><html><head><meta charset=\"utf-8\"><style>" ++
+        "body{{background:#{x:0>6};color:#{x:0>6};font-family:system-ui,sans-serif;" ++
+        "font-size:15px;line-height:1.55;padding:18px;margin:0;}}" ++
+        "a{{color:#4fc1ff;}}pre{{background:#{x:0>6};padding:12px;border-radius:6px;overflow:auto;}}" ++
+        "code{{background:#{x:0>6};padding:1px 4px;border-radius:4px;font-family:monospace;}}" ++
+        "pre code{{background:transparent;padding:0;}}" ++
+        "blockquote{{border-left:3px solid #4fc1ff;margin-left:0;padding-left:12px;color:#9aa0a6;}}" ++
+        "table{{border-collapse:collapse;}}td,th{{border:1px solid #555;padding:4px 8px;}}" ++
+        "img{{max-width:100%;}}</style></head><body>", .{ theme.background, theme.foreground, theme.panel, theme.panel });
     defer app.gpa.free(head);
     try out.appendSlice(app.gpa, head);
     try out.appendSlice(app.gpa, body.?[0..body_len]);
@@ -2055,8 +2142,12 @@ fn openWebTab(app: *App, title_text: []const u8, source: [:0]const u8, file: boo
     c.cadex_label_ellipsize(doc_title);
     c.cadex_widget_expand_h(doc_title);
     c.cadex_box_append(header, doc_title);
-    c.cadex_box_append(header, c.cadex_button_new("Pick", webPickClicked, doc) orelse return);
-    c.cadex_box_append(header, c.cadex_button_new("×", tabCloseClicked, tab) orelse return);
+    const pick = c.cadex_adw_icon_button("edit-find-symbolic", webPickClicked, doc) orelse return;
+    c.cadex_widget_set_tooltip(pick, "Pick an element");
+    c.cadex_box_append(header, pick);
+    const web_close = c.cadex_adw_icon_button("window-close-symbolic", tabCloseClicked, tab) orelse return;
+    c.cadex_widget_set_tooltip(web_close, "Close tab");
+    c.cadex_box_append(header, web_close);
     c.cadex_box_append(container, header);
     const webview = c.cadex_webview_new() orelse return;
     _ = c.cadex_webview_enable_picker(webview, onPickMessage, doc);
@@ -2077,6 +2168,7 @@ fn openWebTab(app: *App, title_text: []const u8, source: [:0]const u8, file: boo
     app.focused = null;
     updateTitle(app);
     updateStatus(app);
+    openPage(app, .terminal);
 }
 
 fn webPickClicked(user: ?*anyopaque) callconv(.c) void {
@@ -2164,6 +2256,7 @@ fn openMediaTab(app: *App, path: [:0]const u8, title: []const u8, kind: MediaKin
     app.focused = null;
     updateTitle(app);
     updateStatus(app);
+    openPage(app, .terminal);
 }
 
 fn createDocTab(
@@ -2407,7 +2500,10 @@ fn notesOpen(doc: *Doc) void {
         const scrolled = c.cadex_scrolled_new(list) orelse return;
         c.cadex_widget_expand(scrolled);
         c.cadex_box_append(box, scrolled);
-        c.cadex_box_append(box, c.cadex_button_new("Close", notesHide, app) orelse return);
+        const close_button = c.cadex_button_new("Close", notesHide, app) orelse return;
+        c.cadex_widget_set_halign(close_button, 2);
+        c.cadex_widget_set_margins(close_button, 0, 0, 8, 0);
+        c.cadex_box_append(box, close_button);
         c.cadex_window_child(window, box);
         app.notes_window = window;
         app.notes_list = list;
@@ -3241,7 +3337,10 @@ fn branchOpen(app: *App) void {
         const scrolled = c.cadex_scrolled_new(list) orelse return;
         c.cadex_widget_expand(scrolled);
         c.cadex_box_append(box, scrolled);
-        c.cadex_box_append(box, c.cadex_button_new("Close", branchHide, app) orelse return);
+        const close_button = c.cadex_button_new("Close", branchHide, app) orelse return;
+        c.cadex_widget_set_halign(close_button, 2);
+        c.cadex_widget_set_margins(close_button, 0, 0, 8, 0);
+        c.cadex_box_append(box, close_button);
         c.cadex_window_child(window, box);
         app.branch_window = window;
         app.branch_list = list;
@@ -3528,6 +3627,7 @@ fn switchSpace(app: *App, index: usize) void {
     app.space_index = index;
     const space = app.spaces.items[index];
     c.cadex_stack_set(app.spaces_stack, space.name.ptr);
+    updateHeaderTabs(app, space);
     if (space.tabs.items.len > 0) {
         const page: usize = @intCast(@max(0, c.cadex_notebook_current(space.notebook)));
         activateTab(app, space.tabs.items[@min(page, space.tabs.items.len - 1)]);
@@ -3660,6 +3760,48 @@ fn themeColors(theme: Theme) core.cadex_terminal_colors {
     return colors;
 }
 
+/// Blend `a` into `b`; `a_pct` is the weight of `a` (0..100).
+fn mixColor(a: u32, b: u32, a_pct: u32) u32 {
+    const ar = (a >> 16) & 0xff;
+    const ag = (a >> 8) & 0xff;
+    const ab = a & 0xff;
+    const br = (b >> 16) & 0xff;
+    const bg = (b >> 8) & 0xff;
+    const bb = b & 0xff;
+    const r = (ar * a_pct + br * (100 - a_pct)) / 100;
+    const g = (ag * a_pct + bg * (100 - a_pct)) / 100;
+    const bl = (ab * a_pct + bb * (100 - a_pct)) / 100;
+    return (r << 16) | (g << 8) | bl;
+}
+
+fn interfaceColors(theme: Theme) Interface {
+    if (theme.interface) |ui| return ui;
+    const bg = theme.background;
+    const fg = theme.foreground;
+    if (theme.dark) {
+        return .{
+            .chrome = mixColor(bg, 0x000000, 72),
+            .panel = mixColor(bg, 0xffffff, 94),
+            .panel_border = mixColor(bg, fg, 86),
+            .tab_active = mixColor(bg, fg, 74),
+            .field = mixColor(bg, fg, 90),
+            .text = fg,
+            .secondary_text = mixColor(fg, bg, 58),
+            .accent = theme.ansi[4],
+        };
+    }
+    return .{
+        .chrome = mixColor(bg, 0xffffff, 68),
+        .panel = bg,
+        .panel_border = mixColor(bg, fg, 84),
+        .tab_active = mixColor(bg, fg, 78),
+        .field = mixColor(bg, fg, 92),
+        .text = fg,
+        .secondary_text = mixColor(fg, bg, 58),
+        .accent = theme.ansi[4],
+    };
+}
+
 fn schedulePaneRedraw(pane: *Pane) void {
     if (pane.closed) return;
     if (!pane.redraw_pending.swap(true, .acq_rel)) c.cadex_idle(paneRedrawIdle, pane);
@@ -3739,7 +3881,7 @@ fn updateStatus(app: *App) void {
 }
 
 fn updateChrome(app: *App) void {
-    if (app.closing) return;
+    if (app.closing or app.spaces.items.len == 0) return;
     const project = std.fs.path.basename(app.root);
     var title: []const u8 = project;
     if (app.page != .terminal) {
@@ -3749,30 +3891,53 @@ fn updateChrome(app: *App) void {
     } else {
         title = "Terminal";
     }
-    var subtitle_buf: [512]u8 = undefined;
-    const branch = if (app.git_status_data) |status| status.branch else "";
-    var subtitle: []const u8 = undefined;
-    if (app.page == .terminal) {
-        const count = c.cadex_notebook_count(currentSpace(app).notebook);
-        subtitle = std.fmt.bufPrint(&subtitle_buf, "{s}{s}{s} · {d} tab(s)", .{
-            project,
-            if (branch.len > 0) " · " else "",
-            branch,
-            count,
-        }) catch project;
-    } else {
-        subtitle = std.fmt.bufPrint(&subtitle_buf, "{s}{s}{s}", .{
-            project,
-            if (branch.len > 0) " · " else "",
-            branch,
-        }) catch project;
-    }
     var title_z: [256]u8 = undefined;
     const title_text = std.fmt.bufPrintZ(&title_z, "{s}", .{title}) catch "Cadex";
-    var subtitle_z: [512]u8 = undefined;
-    const subtitle_text = std.fmt.bufPrintZ(&subtitle_z, "{s}", .{subtitle}) catch project;
     c.cadex_window_title(app.window, title_text.ptr);
-    c.cadex_adw_window_title_set(app.header_title, title_text.ptr, subtitle_text.ptr);
+
+    var folder_buf: [512]u8 = undefined;
+    var folder: []const u8 = project;
+    if (app.page == .terminal) {
+        if (app.focused) |pane| {
+            if (pane.term) |term| {
+                if (term.copyWorkingDirectory(app.gpa)) |cwd| {
+                    defer app.gpa.free(cwd);
+                    if (std.mem.startsWith(u8, cwd, app.root)) {
+                        const rel = std.mem.trim(u8, cwd[app.root.len..], "/");
+                        folder = std.fmt.bufPrint(&folder_buf, "{s}{s}{s}", .{
+                            project,
+                            if (rel.len > 0) "/" else "",
+                            rel,
+                        }) catch project;
+                    } else {
+                        folder = std.fmt.bufPrint(&folder_buf, "{s}", .{cwd}) catch project;
+                    }
+                }
+            }
+        }
+    }
+    var project_z: [512]u8 = undefined;
+    const project_text = std.fmt.bufPrintZ(&project_z, "{s}", .{folder}) catch "Cadex";
+    c.cadex_label_set(app.cwd_label, project_text.ptr);
+    if (app.branch_label) |label| {
+        const branch = if (app.git_status_data) |status| status.branch else "";
+        var branch_z: [256]u8 = undefined;
+        const branch_text = std.fmt.bufPrintZ(&branch_z, "{s}", .{if (branch.len > 0) branch else "no branch"}) catch "no branch";
+        c.cadex_label_set(label, branch_text.ptr);
+    }
+    if (app.page == .terminal) {
+        const count = c.cadex_notebook_count(currentSpace(app).notebook);
+        var tabs_z: [64]u8 = undefined;
+        const tabs_text = std.fmt.bufPrintZ(&tabs_z, "{d} tab{s}", .{ count, if (count == 1) "" else "s" }) catch "1 tab";
+        c.cadex_label_set(app.tabs_label, tabs_text.ptr);
+        c.cadex_widget_visible(app.tabs_label, 1);
+    } else {
+        c.cadex_widget_visible(app.tabs_label, 0);
+    }
+}
+
+fn updateHeaderTabs(app: *App, space: *Space) void {
+    if (app.header_tabs) |bar| c.cadex_tab_bar_set_notebook(bar, space.notebook);
 }
 
 fn statusTimer(user: ?*anyopaque) callconv(.c) void {
@@ -3829,19 +3994,9 @@ fn updateStats(app: *App) void {
         var tokens = std.mem.tokenizeAny(u8, loadavg, " \t");
         if (tokens.next()) |first| load = std.fmt.parseFloat(f64, first) catch 0;
     }
-    if (app.sys_ram_label) |label| {
-        var buf: [64]u8 = undefined;
-        const text = std.fmt.bufPrintZ(&buf, "RAM: {d}%", .{ram_pct}) catch return;
-        c.cadex_label_set(label, text.ptr);
-    }
-    if (app.sys_ports_label) |label| {
-        var buf: [64]u8 = undefined;
-        const text = std.fmt.bufPrintZ(&buf, "Listening ports: {d}", .{ports}) catch return;
-        c.cadex_label_set(label, text.ptr);
-    }
-    if (app.sys_load_label) |label| {
-        var buf: [64]u8 = undefined;
-        const text = std.fmt.bufPrintZ(&buf, "Load: {d:.2}", .{load}) catch return;
+    if (app.stats_label) |label| {
+        var buf: [128]u8 = undefined;
+        const text = std.fmt.bufPrintZ(&buf, "RAM {d}%  ·  {d} ports  ·  load {d:.2}", .{ ram_pct, ports, load }) catch return;
         c.cadex_label_set(label, text.ptr);
     }
 }
@@ -3885,14 +4040,96 @@ fn updateMetrics(app: *App) void {
 
 fn applyTheme(app: *App) void {
     const theme = themes[app.theme_index];
-    // The UI follows the system light/dark and accent from libadwaita. Only the
-    // editor's monospace size is set here; terminal colors are drawn by the core.
-    const css = std.fmt.allocPrintSentinel(app.gpa,
-        "textview, textview text {{ font-family: monospace; font-size: {d}px; }}\n" ++
-            ".cadex-pane-header {{ background-color: @headerbar_bg_color; padding: 3px 6px; }}\n",
-        .{app.settings.font_size}, 0) catch return;
-    defer app.gpa.free(css);
-    c.cadex_css_apply(css.ptr);
+    const ui = interfaceColors(theme);
+    // The interface palette follows the theme (Caffeine by default), like the
+    // macOS app, instead of only following the system accent.
+    c.cadex_set_dark(@intFromBool(theme.dark));
+    var css: std.ArrayList(u8) = .empty;
+    defer css.deinit(app.gpa);
+    appendFormatted(&css, app.gpa, ":root {{ --accent-color: #{x:0>6}; --accent-bg-color: #{x:0>6}; --accent-fg-color: #{x:0>6}; }}\n" ++
+        "@define-color accent_bg_color #{x:0>6};\n" ++
+        "@define-color accent_fg_color #{x:0>6};\n" ++
+        "@define-color accent_color #{x:0>6};\n" ++
+        "@define-color window_bg_color #{x:0>6};\n" ++
+        "@define-color window_fg_color #{x:0>6};\n" ++
+        "@define-color view_bg_color #{x:0>6};\n" ++
+        "@define-color view_fg_color #{x:0>6};\n" ++
+        "@define-color headerbar_bg_color #{x:0>6};\n" ++
+        "@define-color headerbar_fg_color #{x:0>6};\n" ++
+        "@define-color headerbar_border_color #{x:0>6};\n" ++
+        "@define-color card_bg_color #{x:0>6};\n" ++
+        "@define-color card_fg_color #{x:0>6};\n" ++
+        "@define-color sidebar_bg_color #{x:0>6};\n" ++
+        "@define-color sidebar_fg_color #{x:0>6};\n" ++
+        "@define-color popover_bg_color #{x:0>6};\n" ++
+        "@define-color popover_fg_color #{x:0>6};\n" ++
+        "@define-color dialog_bg_color #{x:0>6};\n" ++
+        "@define-color dialog_fg_color #{x:0>6};\n", .{
+        ui.accent,       ui.accent, ui.chrome,
+        ui.accent,       ui.chrome, ui.accent,
+        ui.chrome,       ui.text,   ui.panel,
+        ui.text,         ui.chrome, ui.text,
+        ui.panel_border, ui.panel,  ui.text,
+        ui.panel,        ui.text,   ui.field,
+        ui.text,         ui.chrome, ui.text,
+    });
+    appendFormatted(&css, app.gpa, ".cadex-window {{ background-color: #{x:0>6}; color: #{x:0>6}; }}\n" ++
+        ".cadex-titlebar {{ background-color: #{x:0>6}; color: #{x:0>6}; min-height: 38px; padding: 0 6px; border: none; box-shadow: none; }}\n" ++
+        ".cadex-titlebar button {{ min-height: 26px; min-width: 26px; padding: 0 6px; border-radius: 6px; color: #{x:0>6}; }}\n" ++
+        ".cadex-titlebar button:hover {{ background-color: #{x:0>6}; }}\n" ++
+        ".cadex-tabbar {{ background: transparent; }}\n" ++
+        ".cadex-tabbar .box {{ padding: 0; box-shadow: none; background: transparent; }}\n" ++
+        ".cadex-tabbar tabbox {{ background: transparent; margin: 0 6px; padding: 0; min-height: 32px; }}\n" ++
+        ".cadex-tabbar tab {{ background: transparent; color: #{x:0>6}; min-height: 24px; border-radius: 6px; padding: 2px 8px; }}\n" ++
+        ".cadex-tabbar tab:hover {{ background-color: #{x:0>6}; color: #{x:0>6}; }}\n" ++
+        ".cadex-tabbar tab:checked, .cadex-tabbar tab:selected {{ background-color: #{x:0>6}; color: #{x:0>6}; }}\n" ++
+        ".cadex-tabbar expander {{ color: #{x:0>6}; }}\n" ++
+        ".cadex-sidebar-panel {{ background-color: #{x:0>6}; border: 1px solid #{x:0>6}; border-radius: 10px; }}\n" ++
+        ".cadex-content-panel {{ background-color: #{x:0>6}; border: 1px solid #{x:0>6}; border-radius: 10px; }}\n" ++
+        ".cadex-status {{ background-color: #{x:0>6}; color: #{x:0>6}; min-height: 24px; padding: 1px 10px; border-top: 1px solid #{x:0>6}; }}\n" ++
+        ".cadex-status label {{ font-size: 11px; color: #{x:0>6}; }}\n" ++
+        ".cadex-status .cadex-status-strong {{ color: #{x:0>6}; }}\n" ++
+        ".cadex-pane-header {{ background-color: #{x:0>6}; color: #{x:0>6}; padding: 2px 6px; border-bottom: 1px solid #{x:0>6}; }}\n", .{
+        ui.chrome,         ui.text,
+        ui.chrome,         ui.text,
+        ui.text,           ui.field,
+        ui.secondary_text, ui.field,
+        ui.text,           ui.tab_active,
+        ui.text,           ui.secondary_text,
+        ui.panel,          ui.panel_border,
+        ui.panel,          ui.panel_border,
+        ui.chrome,         ui.secondary_text,
+        ui.panel_border,   ui.secondary_text,
+        ui.text,           ui.chrome,
+        ui.secondary_text, ui.panel_border,
+    });
+    appendFormatted(&css, app.gpa, ".cadex-page {{ background: transparent; }}\n" ++
+        ".cadex-page .heading, .cadex-page .title-4 {{ color: #{x:0>6}; }}\n" ++
+        "entry, spinbutton, dropdown {{ background-color: #{x:0>6}; color: #{x:0>6}; }}\n" ++
+        ".boxed-list {{ background-color: #{x:0>6}; border: 1px solid #{x:0>6}; border-radius: 8px; }}\n" ++
+        ".boxed-list > row {{ background-color: transparent; color: #{x:0>6}; }}\n" ++
+        "list.boxed-list row:selected {{ background-color: #{x:0>6}; color: #{x:0>6}; }}\n" ++
+        ".cadex-sidebar-panel list.navigation-sidebar row:hover {{ background-color: #{x:0>6}; }}\n" ++
+        ".cadex-sidebar-panel list.navigation-sidebar > row:selected {{ background-color: #{x:0>6}; color: #{x:0>6}; }}\n" ++
+        "label.dim-label, .dim-label {{ color: #{x:0>6}; }}\n" ++
+        "textview, textview text {{ font-family: monospace; font-size: {d}px; }}\n", .{
+        ui.text,
+        ui.field,
+        ui.text,
+        ui.panel,
+        ui.panel_border,
+        ui.text,
+        ui.tab_active,
+        ui.text,
+        ui.field,
+        ui.tab_active,
+        ui.text,
+        ui.secondary_text,
+        app.settings.font_size,
+    });
+    const css_z = app.gpa.dupeZ(u8, css.items) catch return;
+    defer app.gpa.free(css_z);
+    c.cadex_css_apply(css_z.ptr);
     for (app.spaces.items) |space| {
         for (space.tabs.items) |tab| {
             for (tab.leaves.items) |pane| {
@@ -5160,24 +5397,6 @@ fn paletteCreate(app: *App) void {
     app.palette_list = list;
 }
 
-fn paletteFilter(app: *App) void {
-    const entry = app.palette_entry orelse return;
-    const list = app.palette_list orelse return;
-    const raw = c.cadex_entry_text(entry);
-    const query = if (raw == null) "" else std.mem.span(@as([*:0]const u8, @ptrCast(raw)));
-    c.cadex_listbox_clear(list);
-    app.palette_filtered.clearRetainingCapacity();
-    for (&commands) |*command| {
-        if (query.len > 0 and !containsIgnoreCase(command.title, query) and !containsIgnoreCase(command.keywords, query)) continue;
-        app.palette_filtered.append(app.gpa, command) catch return;
-        const title = app.gpa.dupeZ(u8, command.title) catch continue;
-        defer app.gpa.free(title);
-        const shortcut = app.gpa.dupeZ(u8, command.shortcut) catch continue;
-        defer app.gpa.free(shortcut);
-        c.cadex_listbox_append_action(list, "go-next-symbolic", title.ptr, if (command.shortcut.len > 0) shortcut.ptr else null);
-    }
-}
-
 fn paletteChanged(user: ?*anyopaque) callconv(.c) void {
     const app: *App = @ptrCast(@alignCast(user.?));
     paletteFilter(app);
@@ -5189,6 +5408,35 @@ fn paletteActivate(user: ?*anyopaque) callconv(.c) void {
     const command = app.palette_filtered.items[0];
     paletteHide(app);
     command.run(app);
+}
+
+fn paletteFilter(app: *App) void {
+    const entry = app.palette_entry orelse return;
+    const list = app.palette_list orelse return;
+    const raw = c.cadex_entry_text(entry);
+    const query = if (raw == null) "" else std.mem.span(@as([*:0]const u8, @ptrCast(raw)));
+    c.cadex_listbox_clear(list);
+    app.palette_filtered.clearRetainingCapacity();
+    const groups = [_][]const Command{ &commands, &command_aliases };
+    for (groups) |group| {
+        for (group) |*command| {
+            if (query.len > 0 and !containsIgnoreCase(command.title, query) and !containsIgnoreCase(command.keywords, query)) continue;
+            var duplicate = false;
+            for (app.palette_filtered.items) |existing| {
+                if (std.mem.eql(u8, existing.title, command.title)) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate) continue;
+            app.palette_filtered.append(app.gpa, command) catch return;
+            const title = app.gpa.dupeZ(u8, command.title) catch continue;
+            defer app.gpa.free(title);
+            const shortcut = app.gpa.dupeZ(u8, command.shortcut) catch continue;
+            defer app.gpa.free(shortcut);
+            c.cadex_listbox_append_action(list, "go-next-symbolic", title.ptr, if (command.shortcut.len > 0) shortcut.ptr else null);
+        }
+    }
 }
 
 fn paletteRow(index: c_int, user: ?*anyopaque) callconv(.c) void {
