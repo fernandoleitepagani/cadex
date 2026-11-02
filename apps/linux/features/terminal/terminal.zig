@@ -81,6 +81,14 @@ pub const Terminal = struct {
         _ = c.cadex_terminal_paste(self.handle, bytes.ptr, bytes.len);
     }
 
+    pub fn scrollTop(self: *Terminal) void {
+        _ = c.cadex_terminal_scroll_to(self.handle, c.CADEX_SCROLL_TOP);
+    }
+
+    pub fn scrollBottom(self: *Terminal) void {
+        _ = c.cadex_terminal_scroll_to(self.handle, c.CADEX_SCROLL_BOTTOM);
+    }
+
     pub fn scroll(self: *Terminal, rows: i32) void {
         _ = c.cadex_terminal_scroll(self.handle, rows);
     }

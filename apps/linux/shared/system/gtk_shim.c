@@ -877,6 +877,14 @@ void cadex_widget_unparent(void *widget) {
     gtk_widget_unparent(GTK_WIDGET(widget));
 }
 
+void cadex_widget_ref(void *widget) {
+    g_object_ref(widget);
+}
+
+void cadex_widget_unref(void *widget) {
+    g_object_unref(widget);
+}
+
 void cadex_widget_on_escape(void *widget, void (*fn)(void *), void *user) {
     CadexSimple *simple = g_new0(CadexSimple, 1);
     simple->fn = fn;
@@ -990,6 +998,22 @@ void cadex_text_view_copy(void *view) {
 
 void cadex_text_view_paste(void *view) {
     gtk_widget_activate_action(GTK_WIDGET(view), "clipboard.paste", NULL);
+}
+
+void cadex_text_view_cut(void *view) {
+    gtk_widget_activate_action(GTK_WIDGET(view), "clipboard.cut", NULL);
+}
+
+void cadex_text_view_undo(void *view) {
+    gtk_widget_activate_action(GTK_WIDGET(view), "text.undo", NULL);
+}
+
+void cadex_text_view_redo(void *view) {
+    gtk_widget_activate_action(GTK_WIDGET(view), "text.redo", NULL);
+}
+
+void cadex_window_minimize(void *window) {
+    if (window) gtk_window_minimize(GTK_WINDOW(window));
 }
 
 void cadex_text_buffer_add_tag(void *buffer, const char *name, unsigned rgb, int bold, int italic, int underline) {
@@ -1161,6 +1185,7 @@ void cadex_listbox_focus_first(void *box) {
 
 #ifdef CADEX_HAS_WEBKIT
 #include <webkit/webkit.h>
+#include <jsc/jsc.h>
 #endif
 
 int cadex_webkit_available(void) {
@@ -1198,6 +1223,43 @@ void cadex_webview_load_uri(void *view, const char *uri) {
 #endif
 }
 
+void cadex_webview_back(void *view) {
+#ifdef CADEX_HAS_WEBKIT
+    if (view) webkit_web_view_go_back(WEBKIT_WEB_VIEW(view));
+#else
+    (void)view;
+#endif
+}
+
+void cadex_webview_forward(void *view) {
+#ifdef CADEX_HAS_WEBKIT
+    if (view) webkit_web_view_go_forward(WEBKIT_WEB_VIEW(view));
+#else
+    (void)view;
+#endif
+}
+
+void cadex_webview_reload(void *view) {
+#ifdef CADEX_HAS_WEBKIT
+    if (view) webkit_web_view_reload(WEBKIT_WEB_VIEW(view));
+#else
+    (void)view;
+#endif
+}
+
+void cadex_webview_load_file(void *view, const char *path) {
+#ifdef CADEX_HAS_WEBKIT
+    if (!view) return;
+    char *uri = g_filename_to_uri(path, NULL, NULL);
+    if (uri) {
+        webkit_web_view_load_uri(WEBKIT_WEB_VIEW(view), uri);
+        g_free(uri);
+    }
+#else
+    (void)view; (void)path;
+#endif
+}
+
 void *cadex_picture_new(const char *path) {
     GtkWidget *picture = gtk_picture_new_for_filename(path);
     gtk_picture_set_can_shrink(GTK_PICTURE(picture), TRUE);
@@ -1218,7 +1280,7 @@ void *cadex_video_new(const char *path) {
 
 int cadex_inhibit_start(const char *reason) {
     char *argv[] = { "systemd-inhibit", "--what=idle:sleep", "--who=Cadex",
-                     (char *)reason, "sleep", "infinity", NULL };
+                     (char *)reason, "/usr/bin/sleep", "infinity", NULL };
     int pid = 0;
     GError *error = NULL;
     if (!g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH | G_SPAWN_DO_NOT_REAP_CHILD,
@@ -1257,6 +1319,15 @@ char *cadex_list_dir(const char *path) {
     return g_string_free(out, FALSE);
 }
 
+int cadex_trash_file(const char *path) {
+    GFile *file = g_file_new_for_path(path);
+    GError *error = NULL;
+    gboolean ok = g_file_trash(file, NULL, &error);
+    if (error) g_error_free(error);
+    g_object_unref(file);
+    return ok ? 1 : 0;
+}
+
 int cadex_window_is_active(void *window) {
     return window && gtk_window_is_active(GTK_WINDOW(window)) ? 1 : 0;
 }
@@ -1268,4 +1339,348 @@ int cadex_path_info(const char *path, int *is_dir, long long *mtime, long long *
     if (mtime) *mtime = (long long)st.st_mtime;
     if (size) *size = (long long)st.st_size;
     return 1;
+}
+
+typedef struct {
+    GtkWidget *view;
+    GtkWidget *gutter;
+} CadexGutter;
+
+static void on_gutter_draw(GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer user) {
+    CadexGutter *state = user;
+    GtkTextView *view = GTK_TEXT_VIEW(state->view);
+    GdkRectangle visible;
+    gtk_text_view_get_visible_rect(view, &visible);
+    PangoLayout *layout = gtk_widget_create_pango_layout(GTK_WIDGET(area), NULL);
+    PangoFontDescription *desc = pango_font_description_from_string("Monospace 10");
+    pango_layout_set_font_description(layout, desc);
+    cairo_set_source_rgb(cr, 0.55, 0.55, 0.58);
+    int y = visible.y;
+    int guard = 0;
+    while (y < visible.y + visible.height && guard < 2000) {
+        guard++;
+        GtkTextIter iter;
+        int line_top = 0;
+        gtk_text_view_get_line_at_y(view, &iter, y, &line_top);
+        int line_number = gtk_text_iter_get_line(&iter);
+        int line_y = 0;
+        int line_height = 0;
+        gtk_text_view_get_line_yrange(view, &iter, &line_y, &line_height);
+        if (line_height <= 0) break;
+        char text[16];
+        g_snprintf(text, sizeof(text), "%d", line_number + 1);
+        pango_layout_set_text(layout, text, -1);
+        int tw = 0, th = 0;
+        pango_layout_get_pixel_size(layout, &tw, &th);
+        cairo_move_to(cr, width - tw - 6, line_y - visible.y + (line_height - th) / 2);
+        pango_cairo_show_layout(cr, layout);
+        y = line_y + line_height;
+    }
+    pango_font_description_free(desc);
+    g_object_unref(layout);
+}
+
+static void on_gutter_scroll(GtkAdjustment *adjustment, gpointer user) {
+    (void)adjustment;
+    gtk_widget_queue_draw(GTK_WIDGET(user));
+}
+
+static void on_view_map(GtkWidget *view, gpointer user) {
+    CadexGutter *state = user;
+    GtkWidget *scrolled = gtk_widget_get_ancestor(view, GTK_TYPE_SCROLLED_WINDOW);
+    if (!scrolled) return;
+    GtkAdjustment *adjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(scrolled));
+    if (adjustment) {
+        g_signal_connect_object(adjustment, "value-changed", G_CALLBACK(on_gutter_scroll), state->gutter, 0);
+    }
+}
+
+static void on_gutter_buffer_changed(GtkTextBuffer *buffer, gpointer user) {
+    (void)buffer;
+    CadexGutter *state = user;
+    gtk_widget_queue_draw(state->gutter);
+}
+
+void *cadex_text_view_with_gutter(void *view) {
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget *gutter = gtk_drawing_area_new();
+    gtk_widget_set_size_request(gutter, 48, -1);
+    gtk_widget_set_vexpand(gutter, TRUE);
+    CadexGutter *state = g_new0(CadexGutter, 1);
+    state->view = view;
+    state->gutter = gutter;
+    gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(gutter), on_gutter_draw, state, NULL);
+    gtk_box_append(box, gutter);
+    gtk_box_append(box, GTK_WIDGET(view));
+    gtk_widget_set_hexpand(GTK_WIDGET(view), TRUE);
+    gtk_widget_set_vexpand(GTK_WIDGET(view), TRUE);
+    g_signal_connect(view, "map", G_CALLBACK(on_view_map), state);
+    g_signal_connect(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)), "changed", G_CALLBACK(on_gutter_buffer_changed), state);
+    g_object_set_data_full(G_OBJECT(box), "cadex-gutter-state", state, g_free);
+    return box;
+}
+
+typedef struct {
+    char *host;
+    void (*fn)(const char *host, int ok, void *user);
+    void *user;
+} CadexProbe;
+
+static void on_probe_exit(GPid pid, gint status, gpointer data) {
+    CadexProbe *probe = data;
+    int ok = g_spawn_check_wait_status(status, NULL) ? 1 : 0;
+    probe->fn(probe->host, ok, probe->user);
+    g_free(probe->host);
+    g_free(probe);
+    g_spawn_close_pid(pid);
+}
+
+void cadex_ssh_probe(const char *host, void (*fn)(const char *host, int ok, void *user), void *user) {
+    char *argv[] = { "ssh", "-o", "ConnectTimeout=2", "-o", "BatchMode=yes",
+                     "-o", "StrictHostKeyChecking=no", (char *)host, "true", NULL };
+    CadexProbe *probe = g_new0(CadexProbe, 1);
+    probe->host = g_strdup(host);
+    probe->fn = fn;
+    probe->user = user;
+    GPid pid = 0;
+    GError *error = NULL;
+    if (!g_spawn_async(NULL, argv, NULL,
+                       G_SPAWN_SEARCH_PATH | G_SPAWN_DO_NOT_REAP_CHILD |
+                       G_SPAWN_STDOUT_TO_DEV_NULL | G_SPAWN_STDERR_TO_DEV_NULL,
+                       NULL, NULL, &pid, &error)) {
+        if (error) g_error_free(error);
+        probe->fn(probe->host, 0, probe->user);
+        g_free(probe->host);
+        g_free(probe);
+        return;
+    }
+    g_child_watch_add(pid, on_probe_exit, probe);
+}
+
+#ifdef CADEX_HAS_WEBKIT
+typedef struct {
+    void (*fn)(const char *payload, void *user);
+    void *user;
+} CadexPicker;
+
+static void on_pick_message(WebKitUserContentManager *manager, JSCValue *value, gpointer user) {
+    (void)manager;
+    CadexPicker *picker = user;
+    char *text = jsc_value_to_string(value);
+    picker->fn(text ? text : "", picker->user);
+    g_free(text);
+}
+#endif
+
+int cadex_webview_enable_picker(void *view, void (*fn)(const char *payload, void *user), void *user) {
+#ifdef CADEX_HAS_WEBKIT
+    if (!view) return 0;
+    WebKitUserContentManager *manager = webkit_web_view_get_user_content_manager(WEBKIT_WEB_VIEW(view));
+    if (!manager) return 0;
+    CadexPicker *picker = g_new0(CadexPicker, 1);
+    picker->fn = fn;
+    picker->user = user;
+    g_signal_connect_data(manager, "script-message-received::cadexPick",
+                          G_CALLBACK(on_pick_message), picker, NULL, 0);
+    if (!webkit_user_content_manager_register_script_message_handler(manager, "cadexPick", NULL)) {
+        g_free(picker);
+        return 0;
+    }
+    return 1;
+#else
+    (void)view; (void)fn; (void)user;
+    return 0;
+#endif
+}
+
+void cadex_webview_set_picking(void *view, int enable) {
+#ifdef CADEX_HAS_WEBKIT
+    if (!view) return;
+    const char *script =
+        "window.__cadexPickInstalled || (function(){"
+        "window.__cadexPickInstalled=true;"
+        "document.addEventListener('mouseover',function(e){if(!window.__cadexPick)return;e.target.style.outline='2px solid #4fc1ff';},true);"
+        "document.addEventListener('mouseout',function(e){if(!window.__cadexPick)return;e.target.style.outline='';},true);"
+        "document.addEventListener('click',function(e){"
+        "if(!window.__cadexPick)return;e.preventDefault();e.stopPropagation();"
+        "var el=e.target;var sel=el.tagName.toLowerCase();"
+        "if(el.id)sel+='#'+el.id;else if(el.className)sel+='.'+String(el.className).trim().split(/\\s+/).join('.');"
+        "var data={selector:sel,tag:el.tagName,id:el.id||'',classes:String(el.className||''),text:(el.innerText||'').slice(0,200),href:el.href||'',html:(el.outerHTML||'').slice(0,2000)};"
+        "window.webkit.messageHandlers.cadexPick.postMessage(JSON.stringify(data));"
+        "window.__cadexPick=false;el.style.outline='';},true);})();"
+        "window.__cadexPick=true;";
+    if (!enable) {
+        script = "window.__cadexPick=false;";
+    }
+    webkit_web_view_evaluate_javascript(WEBKIT_WEB_VIEW(view), script, -1, NULL, NULL, NULL, NULL, NULL);
+#else
+    (void)view; (void)enable;
+#endif
+}
+
+void cadex_webview_test_pick(void *view) {
+#ifdef CADEX_HAS_WEBKIT
+    if (!view) return;
+    const char *script = "window.webkit.messageHandlers.cadexPick.postMessage(JSON.stringify({selector:'test',tag:'TEST',text:'Synthetic pick'}));";
+    webkit_web_view_evaluate_javascript(WEBKIT_WEB_VIEW(view), script, -1, NULL, NULL, NULL, NULL, NULL);
+#else
+    (void)view;
+#endif
+}
+
+/* ---- StatusNotifierItem (Run 5, final backlog) ------------------------ */
+
+static const char *sni_xml =
+    "<node>"
+    "<interface name='org.kde.StatusNotifierItem'>"
+    "<property name='Category' type='s' access='read'/>"
+    "<property name='Id' type='s' access='read'/>"
+    "<property name='Title' type='s' access='read'/>"
+    "<property name='Status' type='s' access='read'/>"
+    "<property name='IconName' type='s' access='read'/>"
+    "<property name='Menu' type='o' access='read'/>"
+    "<property name='ItemIsMenu' type='b' access='read'/>"
+    "<method name='Activate'><arg type='i' direction='in'/><arg type='i' direction='in'/></method>"
+    "<method name='SecondaryActivate'><arg type='i' direction='in'/><arg type='i' direction='in'/></method>"
+    "<method name='ContextMenu'><arg type='i' direction='in'/><arg type='i' direction='in'/></method>"
+    "<method name='Scroll'><arg type='i' direction='in'/><arg type='s' direction='in'/></method>"
+    "</interface></node>";
+
+static const char *menu_xml =
+    "<node>"
+    "<interface name='com.canonical.dbusmenu'>"
+    "<property name='Version' type='u' access='read'/>"
+    "<property name='Status' type='s' access='read'/>"
+    "<property name='TextDirection' type='s' access='read'/>"
+    "<property name='IconThemePath' type='as' access='read'/>"
+    "<method name='GetLayout'><arg type='i' direction='in'/><arg type='i' direction='in'/><arg type='as' direction='in'/>"
+    "<arg type='u' direction='out'/><arg type='(ia{sv}av)' direction='out'/></method>"
+    "<method name='GetGroupProperties'><arg type='ai' direction='in'/><arg type='as' direction='in'/>"
+    "<arg type='a(ia{sv})' direction='out'/></method>"
+    "<method name='GetProperty'><arg type='i' direction='in'/><arg type='s' direction='in'/>"
+    "<arg type='v' direction='out'/></method>"
+    "<method name='Event'><arg type='i' direction='in'/><arg type='s' direction='in'/>"
+    "<arg type='v' direction='in'/><arg type='u' direction='in'/></method>"
+    "<method name='EventGroup'><arg type='a(isvu)' direction='in'/><arg type='i' direction='out'/></method>"
+    "<method name='AboutToShow'><arg type='i' direction='in'/><arg type='b' direction='out'/></method>"
+    "<method name='AboutToShowGroup'><arg type='ai' direction='in'/><arg type='ai' direction='out'/>"
+    "<arg type='ai' direction='out'/></method>"
+    "</interface></node>";
+
+static GDBusConnection *cadex_bus = NULL;
+static GtkWindow *cadex_tray_window = NULL;
+static void (*cadex_tray_fn)(void *user) = NULL;
+static void *cadex_tray_user = NULL;
+static guint cadex_sni_id = 0;
+static guint cadex_menu_id = 0;
+
+static void tray_activate(void) {
+    if (cadex_tray_fn) cadex_tray_fn(cadex_tray_user);
+}
+
+static void sni_method_call(GDBusConnection *connection, const char *sender, const char *object_path,
+                            const char *interface_name, const char *method_name, GVariant *parameters,
+                            GDBusMethodInvocation *invocation, gpointer user_data) {
+    (void)connection; (void)sender; (void)object_path; (void)interface_name; (void)parameters; (void)user_data;
+    if (g_strcmp0(method_name, "Activate") == 0) tray_activate();
+    else if (g_strcmp0(method_name, "SecondaryActivate") == 0) tray_activate();
+    g_dbus_method_invocation_return_value(invocation, NULL);
+}
+
+static GVariant *sni_get_property(GDBusConnection *connection, const char *sender, const char *object_path,
+                                  const char *interface_name, const char *property_name, GError **error,
+                                  gpointer user_data) {
+    (void)connection; (void)sender; (void)object_path; (void)interface_name; (void)error; (void)user_data;
+    if (g_strcmp0(property_name, "Category") == 0) return g_variant_new_string("ApplicationStatus");
+    if (g_strcmp0(property_name, "Id") == 0) return g_variant_new_string("cadex");
+    if (g_strcmp0(property_name, "Title") == 0) return g_variant_new_string("Cadex");
+    if (g_strcmp0(property_name, "Status") == 0) return g_variant_new_string("Active");
+    if (g_strcmp0(property_name, "IconName") == 0) return g_variant_new_string("cadex");
+    if (g_strcmp0(property_name, "Menu") == 0) return g_variant_new_object_path("/StatusNotifierItem/Menu");
+    if (g_strcmp0(property_name, "ItemIsMenu") == 0) return g_variant_new_boolean(FALSE);
+    return NULL;
+}
+
+static void menu_method_call(GDBusConnection *connection, const char *sender, const char *object_path,
+                             const char *interface_name, const char *method_name, GVariant *parameters,
+                             GDBusMethodInvocation *invocation, gpointer user_data) {
+    (void)connection; (void)sender; (void)object_path; (void)interface_name; (void)parameters; (void)user_data;
+    if (g_strcmp0(method_name, "GetLayout") == 0) {
+        GVariantBuilder layout;
+        g_variant_builder_init(&layout, G_VARIANT_TYPE("(ia{sv}av)"));
+        g_variant_builder_add(&layout, "i", 0);
+        g_variant_builder_open(&layout, G_VARIANT_TYPE("a{sv}"));
+        g_variant_builder_close(&layout);
+        g_variant_builder_open(&layout, G_VARIANT_TYPE("av"));
+        g_variant_builder_close(&layout);
+        g_dbus_method_invocation_return_value(invocation,
+            g_variant_new("(u@(ia{sv}av))", 1, g_variant_builder_end(&layout)));
+        return;
+    }
+    if (g_strcmp0(method_name, "GetGroupProperties") == 0) {
+        GVariantBuilder empty;
+        g_variant_builder_init(&empty, G_VARIANT_TYPE("a(ia{sv})"));
+        g_dbus_method_invocation_return_value(invocation, g_variant_new("(@a(ia{sv}))", g_variant_builder_end(&empty)));
+        return;
+    }
+    if (g_strcmp0(method_name, "GetProperty") == 0) {
+        g_dbus_method_invocation_return_value(invocation, g_variant_new("(v)", g_variant_new_string("")));
+        return;
+    }
+    if (g_strcmp0(method_name, "AboutToShow") == 0) {
+        g_dbus_method_invocation_return_value(invocation, g_variant_new("(b)", FALSE));
+        return;
+    }
+    if (g_strcmp0(method_name, "AboutToShowGroup") == 0) {
+        GVariantBuilder empty;
+        g_variant_builder_init(&empty, G_VARIANT_TYPE("ai"));
+        g_dbus_method_invocation_return_value(invocation, g_variant_new("(@ai@ai)", g_variant_builder_end(&empty), g_variant_builder_end(&empty)));
+        return;
+    }
+    if (g_strcmp0(method_name, "EventGroup") == 0) {
+        g_dbus_method_invocation_return_value(invocation, g_variant_new("(i)", 0));
+        return;
+    }
+    g_dbus_method_invocation_return_value(invocation, NULL);
+}
+
+static GVariant *menu_get_property(GDBusConnection *connection, const char *sender, const char *object_path,
+                                   const char *interface_name, const char *property_name, GError **error,
+                                   gpointer user_data) {
+    (void)connection; (void)sender; (void)object_path; (void)interface_name; (void)error; (void)user_data;
+    if (g_strcmp0(property_name, "Version") == 0) return g_variant_new_uint32(3);
+    if (g_strcmp0(property_name, "Status") == 0) return g_variant_new_string("normal");
+    if (g_strcmp0(property_name, "TextDirection") == 0) return g_variant_new_string("ltr");
+    if (g_strcmp0(property_name, "IconThemePath") == 0) {
+        GVariantBuilder paths;
+        g_variant_builder_init(&paths, G_VARIANT_TYPE("as"));
+        return g_variant_builder_end(&paths);
+    }
+    return NULL;
+}
+
+static const GDBusInterfaceVTable sni_vtable = { sni_method_call, sni_get_property, NULL, {0} };
+static const GDBusInterfaceVTable menu_vtable = { menu_method_call, menu_get_property, NULL, {0} };
+
+void cadex_tray_start(void *window, void (*fn)(void *user), void *user) {
+    if (cadex_bus) return;
+    cadex_tray_window = GTK_WINDOW(window);
+    cadex_tray_fn = fn;
+    cadex_tray_user = user;
+    GError *error = NULL;
+    cadex_bus = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, &error);
+    if (!cadex_bus) {
+        if (error) g_error_free(error);
+        return;
+    }
+    GDBusNodeInfo *sni = g_dbus_node_info_new_for_xml(sni_xml, NULL);
+    GDBusNodeInfo *menu = g_dbus_node_info_new_for_xml(menu_xml, NULL);
+    if (sni) cadex_sni_id = g_dbus_connection_register_object(cadex_bus, "/StatusNotifierItem", sni->interfaces[0], &sni_vtable, NULL, NULL, NULL);
+    if (menu) cadex_menu_id = g_dbus_connection_register_object(cadex_bus, "/StatusNotifierItem/Menu", menu->interfaces[0], &menu_vtable, NULL, NULL, NULL);
+    g_dbus_connection_call(cadex_bus, "org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher",
+                           "org.kde.StatusNotifierWatcher", "RegisterStatusNotifierItem",
+                           g_variant_new("(s)", "/StatusNotifierItem"), NULL, G_DBUS_CALL_FLAGS_NONE,
+                           -1, NULL, NULL, NULL);
+    if (sni) g_dbus_node_info_unref(sni);
+    if (menu) g_dbus_node_info_unref(menu);
 }

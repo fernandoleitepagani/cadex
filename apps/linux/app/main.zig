@@ -78,13 +78,74 @@ const themes = [_]Theme{
         .panel = 0xeee8d5,
         .ansi = .{ 0x073642, 0xdc322f, 0x859900, 0xb58900, 0x268bd2, 0xd33682, 0x2aa198, 0xeee8d5, 0x002b36, 0xcb4b16, 0x586e75, 0x657b83, 0x839496, 0x6c71c4, 0x93a1a1, 0xfdf6e3 },
     },
+    .{
+        .name = "Nord",
+        .dark = true,
+        .background = 0x2e3440,
+        .foreground = 0xd8dee9,
+        .cursor = 0xd8dee9,
+        .panel = 0x3b4252,
+        .ansi = .{ 0x3b4252, 0xbf616a, 0xa3be8c, 0xebcb8b, 0x81a1c1, 0xb48ead, 0x88c0d0, 0xe5e9f0, 0x4c566a, 0xbf616a, 0xa3be8c, 0xebcb8b, 0x81a1c1, 0xb48ead, 0x8fbcbb, 0xeceff4 },
+    },
+    .{
+        .name = "Dracula",
+        .dark = true,
+        .background = 0x282a36,
+        .foreground = 0xf8f8f2,
+        .cursor = 0xf8f8f2,
+        .panel = 0x44475a,
+        .ansi = .{ 0x21222c, 0xff5555, 0x50fa7b, 0xf1fa8c, 0xbd93f9, 0xff79c6, 0x8be9fd, 0xf8f8f2, 0x6272a4, 0xff6e6e, 0x69ff94, 0xffffa5, 0xd6acff, 0xff92df, 0xa4ffff, 0xffffff },
+    },
+    .{
+        .name = "Gruvbox Dark",
+        .dark = true,
+        .background = 0x282828,
+        .foreground = 0xebdbb2,
+        .cursor = 0xebdbb2,
+        .panel = 0x3c3836,
+        .ansi = .{ 0x282828, 0xcc241d, 0x98971a, 0xd79921, 0x458588, 0xb16286, 0x689d6a, 0xa89984, 0x928374, 0xfb4934, 0xb8bb26, 0xfabd2f, 0x83a598, 0xd3869b, 0x8ec07c, 0xebdbb2 },
+    },
+    .{
+        .name = "Tokyo Night",
+        .dark = true,
+        .background = 0x1a1b26,
+        .foreground = 0xc0caf5,
+        .cursor = 0xc0caf5,
+        .panel = 0x24283b,
+        .ansi = .{ 0x15161e, 0xf7768e, 0x9ece6a, 0xe0af68, 0x7aa2f7, 0xbb9af7, 0x7dcfff, 0xa9b1d6, 0x414868, 0xf7768e, 0x9ece6a, 0xe0af68, 0x7aa2f7, 0xbb9af7, 0x7dcfff, 0xc0caf5 },
+    },
+    .{
+        .name = "One Dark",
+        .dark = true,
+        .background = 0x282c34,
+        .foreground = 0xabb2bf,
+        .cursor = 0x528bff,
+        .panel = 0x21252b,
+        .ansi = .{ 0x282c34, 0xe06c75, 0x98c379, 0xe5c07b, 0x61afef, 0xc678dd, 0x56b6c2, 0xabb2bf, 0x5c6370, 0xe06c75, 0x98c379, 0xe5c07b, 0x61afef, 0xc678dd, 0x56b6c2, 0xffffff },
+    },
+    .{
+        .name = "Catppuccin Mocha",
+        .dark = true,
+        .background = 0x1e1e2e,
+        .foreground = 0xcdd6f4,
+        .cursor = 0xf5e0dc,
+        .panel = 0x313244,
+        .ansi = .{ 0x45475a, 0xf38ba8, 0xa6e3a1, 0xf9e2af, 0x89b4fa, 0xf5c2e7, 0x94e2d5, 0xbac2de, 0x585b70, 0xf38ba8, 0xa6e3a1, 0xf9e2af, 0x89b4fa, 0xf5c2e7, 0x94e2d5, 0xa6adc8 },
+    },
 };
+
 
 const theme_names = [_][*:0]const u8{
     "Cadex Dark",
     "Cadex Light",
     "Solarized Dark",
     "Solarized Light",
+    "Nord",
+    "Dracula",
+    "Gruvbox Dark",
+    "Tokyo Night",
+    "One Dark",
+    "Catppuccin Mocha",
 };
 
 const Settings = struct {
@@ -100,6 +161,21 @@ const Space = struct {
     tabs: std.ArrayList(*Tab) = .empty,
 };
 
+const Node = struct {
+    parent: ?*Split = null,
+    kind: enum { leaf, split } = .leaf,
+    pane: ?*Pane = null,
+    split: ?*Split = null,
+};
+
+const Split = struct {
+    orientation: c_int,
+    widget: *anyopaque,
+    first: *Node,
+    second: *Node,
+    node: *Node,
+};
+
 const TabKind = enum { terminal, document };
 
 const Tab = struct {
@@ -111,8 +187,8 @@ const Tab = struct {
     title_label: *anyopaque,
     kind: TabKind = .terminal,
     doc: ?*Doc = null,
-    panes: [2]?*Pane = .{ null, null },
-    orientation: c_int = HORIZONTAL,
+    root: ?*Node = null,
+    leaves: std.ArrayList(*Pane) = .empty,
     closed: bool = false,
 };
 
@@ -124,6 +200,7 @@ const Pane = struct {
     area: *anyopaque,
     header_label: *anyopaque,
     title: [:0]u8,
+    node: *Node = undefined,
     closed: bool = false,
     redraw_pending: std.atomic.Value(bool) = .init(false),
 };
@@ -150,6 +227,7 @@ const Doc = struct {
     media: bool = false,
     save_button: ?*anyopaque = null,
     preview_button: ?*anyopaque = null,
+    notes_button: ?*anyopaque = null,
     language_buf: [48]u8 = undefined,
 };
 
@@ -160,6 +238,8 @@ const Entry = struct {
 };
 
 const SearchMode = enum { files, content };
+
+const PromptMode = enum { file, folder, rename, url };
 
 const SpinLock = struct {
     locked: std.atomic.Value(bool) = .init(false),
@@ -179,10 +259,20 @@ const SearchHit = struct {
     text: []u8,
 };
 
+const NoteRow = struct {
+    kind: enum { heading, backlink },
+    line: usize,
+    path: ?[:0]u8 = null,
+};
+
+const AgentState = enum { idle, working, waiting, done };
+
 const AgentSession = struct {
     path: [:0]u8,
     label: []u8,
     mtime: i64,
+    state: AgentState = .idle,
+    tokens: u64 = 0,
 };
 
 const App = struct {
@@ -197,10 +287,12 @@ const App = struct {
     find_entry: *anyopaque,
     find_open: bool = false,
     cwd_label: *anyopaque,
+    stats_label: *anyopaque = undefined,
     tabs_label: *anyopaque,
     message_label: *anyopaque = undefined,
     spaces: std.ArrayList(*Space) = .empty,
     space_index: usize = 0,
+    restoring_spaces: bool = false,
     focused: ?*Pane = null,
     active_doc: ?*Doc = null,
     theme_index: usize = 0,
@@ -228,6 +320,7 @@ const App = struct {
     files_list: *anyopaque = undefined,
     files_title: *anyopaque = undefined,
     files_entries: std.ArrayList(Entry) = .empty,
+    files_selected: ?usize = null,
     files_watcher: ?*core.cadex_explorer_watcher = null,
     files_pending: std.atomic.Value(bool) = .init(false),
 
@@ -241,6 +334,8 @@ const App = struct {
     search_mutex: SpinLock = .{},
     search_pending: std.atomic.Value(bool) = .init(false),
     search_content: ?*core.cadex_search_content = null,
+    search_case: bool = false,
+    search_regex: bool = false,
     search_done: bool = false,
     search_truncated: bool = false,
     search_files_searched: u32 = 0,
@@ -253,12 +348,16 @@ const App = struct {
     git_repo: ?[:0]u8 = null,
     git_status_data: ?documents.git.Status = null,
     git_selected: ?usize = null,
+    branch_window: ?*anyopaque = null,
+    branch_list: ?*anyopaque = null,
+    branch_names: std.ArrayList([]u8) = .empty,
 
     // History (Run 4).
     history_list: *anyopaque = undefined,
     history_status: *anyopaque = undefined,
     history_log: ?*core.cadex_history = null,
     history_commits: std.ArrayList(documents.git.Commit) = .empty,
+    history_selected: ?usize = null,
     history_has_more: bool = true,
     history_loaded: bool = false,
 
@@ -269,13 +368,26 @@ const App = struct {
     ssh_list: *anyopaque = undefined,
     ssh_status: *anyopaque = undefined,
     ssh_hosts: std.ArrayList([]u8) = .empty,
+    ssh_statuses: std.ArrayList(u8) = .empty,
+    ssh_selected: ?usize = null,
+    ssh_probed: usize = 0,
+    ssh_up: usize = 0,
     power_button: ?*anyopaque = null,
     power_pid: i32 = 0,
+
+    // Markdown notes index (headings and backlinks).
+    notes_window: ?*anyopaque = null,
+    notes_list: ?*anyopaque = null,
+    notes_index: ?*core.cadex_markdown_index = null,
+    notes_doc: ?*Doc = null,
+    notes_rows: std.ArrayList(NoteRow) = .empty,
+    notes_tries: u32 = 0,
 
     // New file/folder prompt.
     prompt_window: ?*anyopaque = null,
     prompt_entry: ?*anyopaque = null,
-    prompt_dir: bool = false,
+    prompt_mode: PromptMode = .file,
+    prompt_target: ?[:0]u8 = null,
 };
 
 const Command = struct {
@@ -313,14 +425,99 @@ const commands = [_]Command{
     .{ .id = "app.test-notification", .title = "Test Notification", .keywords = "notification test", .shortcut = "", .run = cmdTestNotification },
     .{ .id = "document.save", .title = "Save Document", .keywords = "save write file", .shortcut = "Ctrl+Shift+S", .run = cmdSaveDocument },
     .{ .id = "document.preview", .title = "Toggle Markdown Preview", .keywords = "preview markdown render", .shortcut = "Ctrl+Shift+M", .run = cmdTogglePreview },
+    .{ .id = "markdown.notes", .title = "Markdown Headings and Backlinks", .keywords = "markdown notes headings backlinks outline", .shortcut = "Ctrl+Shift+Alt+M", .run = cmdMarkdownNotes },
+    .{ .id = "preview.url", .title = "Open URL Preview", .keywords = "preview web url http", .shortcut = "Ctrl+Shift+Alt+U", .run = cmdOpenUrl },
+    .{ .id = "preview.test-pick", .title = "Test Element Picker", .keywords = "preview pick element test", .shortcut = "", .run = cmdTestPick },
     .{ .id = "explorer.new-file", .title = "New File", .keywords = "explorer file create", .shortcut = "", .run = cmdNewFile },
     .{ .id = "explorer.new-folder", .title = "New Folder", .keywords = "explorer folder create", .shortcut = "", .run = cmdNewFolder },
+    .{ .id = "explorer.rename", .title = "Rename File", .keywords = "explorer rename", .shortcut = "", .run = cmdRenameFile },
+    .{ .id = "explorer.delete", .title = "Move to Trash", .keywords = "explorer delete trash", .shortcut = "", .run = cmdDeleteFile },
     .{ .id = "explorer.refresh", .title = "Refresh Explorer", .keywords = "explorer files refresh", .shortcut = "", .run = cmdRefreshExplorer },
     .{ .id = "git.commit-message", .title = "Write Commit Message", .keywords = "git commit message", .shortcut = "Ctrl+Shift+Alt+C", .run = cmdGitCommitMessage },
+    .{ .id = "git.branches", .title = "Switch Branch", .keywords = "git branch checkout", .shortcut = "", .run = cmdGitBranches },
+    .{ .id = "git.side-diff", .title = "Side-by-Side Diff", .keywords = "git diff side split", .shortcut = "", .run = cmdGitSideDiff },
+    .{ .id = "git.init", .title = "Initialize Repository", .keywords = "git init repository", .shortcut = "", .run = cmdGitInit },
     .{ .id = "git.refresh", .title = "Refresh Source Control", .keywords = "git status refresh", .shortcut = "", .run = cmdRefreshGit },
     .{ .id = "history.refresh", .title = "Refresh Git History", .keywords = "git history log refresh", .shortcut = "", .run = cmdRefreshHistory },
     .{ .id = "settings.open", .title = "Settings", .keywords = "settings preferences theme font", .shortcut = "Ctrl+Shift+,", .run = cmdSettings },
     .{ .id = "app.quit", .title = "Quit Cadex", .keywords = "quit exit", .shortcut = "Ctrl+Shift+Q", .run = cmdQuit },
+};
+
+
+// Mac commands that have a Linux equivalent under a different id. They are
+// runnable (palette by id) but not listed twice in the palette.
+const command_aliases = [_]Command{
+    .{ .id = "edit.copy", .title = "Copy", .keywords = "", .shortcut = "", .run = cmdCopy },
+    .{ .id = "edit.paste", .title = "Paste", .keywords = "", .shortcut = "", .run = cmdPaste },
+    .{ .id = "edit.select-all", .title = "Select All", .keywords = "", .shortcut = "", .run = cmdSelectAll },
+    .{ .id = "edit.find", .title = "Find", .keywords = "", .shortcut = "", .run = cmdFind },
+    .{ .id = "edit.cut", .title = "Cut", .keywords = "", .shortcut = "", .run = cmdTextCut },
+    .{ .id = "edit.undo", .title = "Undo", .keywords = "", .shortcut = "", .run = cmdTextUndo },
+    .{ .id = "edit.redo", .title = "Redo", .keywords = "", .shortcut = "", .run = cmdTextRedo },
+    .{ .id = "app.hide", .title = "Hide Window", .keywords = "", .shortcut = "", .run = cmdAppHide },
+    .{ .id = "editor.save", .title = "Save", .keywords = "", .shortcut = "", .run = cmdSaveDocument },
+    .{ .id = "explorer.open", .title = "Open", .keywords = "", .shortcut = "", .run = cmdExplorerOpen },
+    .{ .id = "explorer.trash", .title = "Move to Trash", .keywords = "", .shortcut = "", .run = cmdDeleteFile },
+    .{ .id = "explorer.copy-path", .title = "Copy Path", .keywords = "", .shortcut = "", .run = cmdExplorerCopyPath },
+    .{ .id = "explorer.focus", .title = "Focus Explorer", .keywords = "", .shortcut = "", .run = cmdSidebarFiles },
+    .{ .id = "explorer.row", .title = "Open Row", .keywords = "", .shortcut = "", .run = cmdExplorerOpen },
+    .{ .id = "explorer.open-in-tab", .title = "Open in Tab", .keywords = "", .shortcut = "", .run = cmdExplorerOpen },
+    .{ .id = "explorer.open-beside", .title = "Open", .keywords = "", .shortcut = "", .run = cmdExplorerOpen },
+    .{ .id = "explorer.open-in-finder", .title = "Reveal Folder", .keywords = "", .shortcut = "", .run = cmdExplorerReveal },
+    .{ .id = "explorer.copy-relative-path", .title = "Copy Relative Path", .keywords = "", .shortcut = "", .run = cmdExplorerCopyRelative },
+    .{ .id = "explorer.open-in-terminal", .title = "Open in Terminal", .keywords = "", .shortcut = "", .run = cmdExplorerOpenTerminal },
+    .{ .id = "explorer.reveal", .title = "Reveal Folder", .keywords = "", .shortcut = "", .run = cmdExplorerReveal },
+    .{ .id = "git.stage", .title = "Stage", .keywords = "", .shortcut = "", .run = cmdGitStage },
+    .{ .id = "git.unstage", .title = "Unstage", .keywords = "", .shortcut = "", .run = cmdGitUnstage },
+    .{ .id = "git.discard", .title = "Discard", .keywords = "", .shortcut = "", .run = cmdGitDiscard },
+    .{ .id = "git.commit", .title = "Commit", .keywords = "", .shortcut = "", .run = cmdGitCommitMessage },
+    .{ .id = "git.push", .title = "Push", .keywords = "", .shortcut = "", .run = cmdGitPush },
+    .{ .id = "git.pull", .title = "Pull", .keywords = "", .shortcut = "", .run = cmdGitPull },
+    .{ .id = "git.fetch", .title = "Fetch", .keywords = "", .shortcut = "", .run = cmdGitFetch },
+    .{ .id = "git.stage-all", .title = "Stage All", .keywords = "", .shortcut = "", .run = cmdGitStageAll },
+    .{ .id = "git.unstage-all", .title = "Unstage All", .keywords = "", .shortcut = "", .run = cmdGitUnstageAll },
+    .{ .id = "git.open-file", .title = "Open File", .keywords = "", .shortcut = "", .run = cmdGitOpenFile },
+    .{ .id = "git.open-file-in-tab", .title = "Open File", .keywords = "", .shortcut = "", .run = cmdGitOpenFile },
+    .{ .id = "git.open-file-beside", .title = "Open File", .keywords = "", .shortcut = "", .run = cmdGitOpenFile },
+    .{ .id = "git.reveal", .title = "Reveal Folder", .keywords = "", .shortcut = "", .run = cmdGitReveal },
+    .{ .id = "git.open-diff-in-tab", .title = "Open Diff", .keywords = "", .shortcut = "", .run = cmdGitOpenDiff },
+    .{ .id = "git.open-diff-beside", .title = "Open Diff", .keywords = "", .shortcut = "", .run = cmdGitSideDiff },
+    .{ .id = "git.history-in-tab", .title = "History", .keywords = "", .shortcut = "", .run = cmdSidebarHistory },
+    .{ .id = "git.open-diff", .title = "Open Diff", .keywords = "", .shortcut = "", .run = cmdGitOpenDiff },
+    .{ .id = "git.switch-branch", .title = "Switch Branch", .keywords = "", .shortcut = "", .run = cmdGitBranches },
+    .{ .id = "git.history", .title = "History", .keywords = "", .shortcut = "", .run = cmdSidebarHistory },
+    .{ .id = "git.show", .title = "Source Control", .keywords = "", .shortcut = "", .run = cmdSidebarGit },
+    .{ .id = "markdown.backlinks", .title = "Backlinks", .keywords = "", .shortcut = "", .run = cmdMarkdownNotes },
+    .{ .id = "markdown.toggle-preview", .title = "Toggle Preview", .keywords = "", .shortcut = "", .run = cmdTogglePreview },
+    .{ .id = "pane.next", .title = "Next Pane", .keywords = "", .shortcut = "", .run = cmdPaneNext },
+    .{ .id = "pane.previous", .title = "Previous Pane", .keywords = "", .shortcut = "", .run = cmdPanePrev },
+    .{ .id = "power.keep-awake", .title = "Keep Awake", .keywords = "", .shortcut = "", .run = cmdPowerKeepAwake },
+    .{ .id = "power.allow-sleep", .title = "Allow Sleep", .keywords = "", .shortcut = "", .run = cmdPowerAllowSleep },
+    .{ .id = "preview.open", .title = "Open Preview", .keywords = "", .shortcut = "", .run = cmdOpenUrl },
+    .{ .id = "preview.back", .title = "Back", .keywords = "", .shortcut = "", .run = cmdPreviewBack },
+    .{ .id = "preview.forward", .title = "Forward", .keywords = "", .shortcut = "", .run = cmdPreviewForward },
+    .{ .id = "preview.reload", .title = "Reload", .keywords = "", .shortcut = "", .run = cmdPreviewReload },
+    .{ .id = "preview.open-in-tab", .title = "Open Preview", .keywords = "", .shortcut = "", .run = cmdOpenUrl },
+    .{ .id = "search.files", .title = "Search Files", .keywords = "", .shortcut = "", .run = cmdSearchFiles },
+    .{ .id = "search.content", .title = "Search Content", .keywords = "", .shortcut = "", .run = cmdSearchContent },
+    .{ .id = "theme.choose", .title = "Next Theme", .keywords = "", .shortcut = "", .run = cmdThemeNext },
+    .{ .id = "theme.choose-dark", .title = "Dark Theme", .keywords = "", .shortcut = "", .run = cmdThemeDark },
+    .{ .id = "theme.choose-light", .title = "Light Theme", .keywords = "", .shortcut = "", .run = cmdThemeLight },
+    .{ .id = "diff.toggle-layout", .title = "Side-by-Side Diff", .keywords = "", .shortcut = "", .run = cmdGitSideDiff },
+    .{ .id = "window.new", .title = "New Space", .keywords = "", .shortcut = "", .run = cmdWindowNew },
+    .{ .id = "space.switch", .title = "Next Space", .keywords = "", .shortcut = "", .run = cmdSpaceNext },
+    .{ .id = "tab.previous-used", .title = "Previous Tab", .keywords = "", .shortcut = "", .run = cmdPrevTab },
+    .{ .id = "terminal.scroll-top", .title = "Scroll to Top", .keywords = "", .shortcut = "", .run = cmdTerminalScrollTop },
+    .{ .id = "terminal.scroll-bottom", .title = "Scroll to Bottom", .keywords = "", .shortcut = "", .run = cmdTerminalScrollBottom },
+    .{ .id = "terminal.clear", .title = "Clear Terminal", .keywords = "", .shortcut = "", .run = cmdTerminalClear },
+    .{ .id = "history.copy-sha", .title = "Copy Commit SHA", .keywords = "", .shortcut = "", .run = cmdHistoryCopySha },
+    .{ .id = "history.current-branch", .title = "Current Branch", .keywords = "", .shortcut = "", .run = cmdHistoryCurrentBranch },
+    .{ .id = "history.open-remote", .title = "Open Commit on the Remote", .keywords = "", .shortcut = "", .run = cmdHistoryOpenRemote },
+    .{ .id = "search.toggle-case", .title = "Toggle Case Sensitivity", .keywords = "", .shortcut = "", .run = cmdSearchToggleCase },
+    .{ .id = "search.toggle-regex", .title = "Toggle Regex", .keywords = "", .shortcut = "", .run = cmdSearchToggleRegex },
+    .{ .id = "power.keep-awake-while-running", .title = "Keep Awake", .keywords = "", .shortcut = "", .run = cmdPowerKeepAwake },
+    .{ .id = "settings.open-themes", .title = "Themes", .keywords = "", .shortcut = "", .run = cmdSettings },
+    .{ .id = "settings.open-terminal", .title = "Terminal Settings", .keywords = "", .shortcut = "", .run = cmdSettings },
 };
 
 pub fn main() !void {
@@ -482,9 +679,12 @@ fn create(launch: *Launch, gtk_app: *anyopaque) !void {
     app.message_label = c.cadex_label_new("") orelse return error.GtkFailed;
     c.cadex_label_ellipsize(app.message_label);
     c.cadex_widget_expand_h(app.message_label);
+    app.stats_label = c.cadex_label_new("") orelse return error.GtkFailed;
+    c.cadex_label_ellipsize(app.stats_label);
     app.tabs_label = c.cadex_label_new("1 tab") orelse return error.GtkFailed;
     c.cadex_box_append(status, app.cwd_label);
     c.cadex_box_append(status, app.message_label);
+    c.cadex_box_append(status, app.stats_label);
     c.cadex_box_append(status, app.tabs_label);
     c.cadex_box_append(app.content, status);
 
@@ -495,7 +695,7 @@ fn create(launch: *Launch, gtk_app: *anyopaque) !void {
     c.cadex_window_on_close(app.window, closeCb, app);
     c.cadex_window_on_key(app.window, windowKey, app);
 
-    try newSpace(app);
+    try restoreSpaces(app);
     applyFont(app);
     applyTheme(app);
     applySidebar(app);
@@ -504,6 +704,7 @@ fn create(launch: *Launch, gtk_app: *anyopaque) !void {
     refreshGit(app);
     loadHistory(app, false);
     c.cadex_window_present(app.window, @intFromBool(launch.background));
+    c.cadex_tray_start(app.window, trayActivated, app);
     if (app.focused) |pane| c.cadex_widget_focus(pane.area);
     _ = c.cadex_timeout(1000, statusTimer, app);
 }
@@ -571,6 +772,10 @@ fn buildFilesPage(app: *App) !*anyopaque {
     c.cadex_box_append(actions, c.cadex_button_new("New Folder", newFolderClicked, app) orelse return error.GtkFailed);
     c.cadex_box_append(actions, c.cadex_button_new("Refresh", filesRefreshClicked, app) orelse return error.GtkFailed);
     c.cadex_box_append(page, actions);
+    const actions2 = c.cadex_box_new_h(4) orelse return error.GtkFailed;
+    c.cadex_box_append(actions2, c.cadex_button_new("Rename", filesRenameClicked, app) orelse return error.GtkFailed);
+    c.cadex_box_append(actions2, c.cadex_button_new("Delete", filesDeleteClicked, app) orelse return error.GtkFailed);
+    c.cadex_box_append(page, actions2);
     app.files_list = c.cadex_listbox_new() orelse return error.GtkFailed;
     c.cadex_listbox_on_activated(app.files_list, filesRowActivated, app);
     c.cadex_listbox_on_keys(app.files_list, filesRowActivated, app);
@@ -592,6 +797,7 @@ fn buildSearchPage(app: *App) !*anyopaque {
     const modes = c.cadex_box_new_h(4) orelse return error.GtkFailed;
     c.cadex_box_append(modes, c.cadex_button_new("Files", searchFilesClicked, app) orelse return error.GtkFailed);
     c.cadex_box_append(modes, c.cadex_button_new("Content", searchContentClicked, app) orelse return error.GtkFailed);
+    c.cadex_box_append(modes, c.cadex_button_new("Cancel", searchCancelClicked, app) orelse return error.GtkFailed);
     app.search_status = c.cadex_label_new("Files") orelse return error.GtkFailed;
     c.cadex_label_ellipsize(app.search_status);
     c.cadex_widget_expand_h(app.search_status);
@@ -614,12 +820,15 @@ fn buildGitPage(app: *App) !*anyopaque {
     c.cadex_label_ellipsize(app.git_branch);
     c.cadex_widget_expand_h(app.git_branch);
     c.cadex_box_append(head, app.git_branch);
+    c.cadex_box_append(head, c.cadex_button_new("Branches", gitBranchesClicked, app) orelse return error.GtkFailed);
+    c.cadex_box_append(head, c.cadex_button_new("Init", gitInitClicked, app) orelse return error.GtkFailed);
     c.cadex_box_append(head, c.cadex_button_new("Refresh", gitRefreshClicked, app) orelse return error.GtkFailed);
     c.cadex_box_append(page, head);
     const stage_row = c.cadex_box_new_h(4) orelse return error.GtkFailed;
     c.cadex_box_append(stage_row, c.cadex_button_new("Stage", gitStageClicked, app) orelse return error.GtkFailed);
     c.cadex_box_append(stage_row, c.cadex_button_new("Unstage", gitUnstageClicked, app) orelse return error.GtkFailed);
     c.cadex_box_append(stage_row, c.cadex_button_new("Discard", gitDiscardClicked, app) orelse return error.GtkFailed);
+    c.cadex_box_append(stage_row, c.cadex_button_new("Side Diff", gitSideDiffClicked, app) orelse return error.GtkFailed);
     c.cadex_box_append(page, stage_row);
     const action_row = c.cadex_box_new_h(4) orelse return error.GtkFailed;
     c.cadex_box_append(action_row, c.cadex_button_new("Commit All", gitCommitClicked, app) orelse return error.GtkFailed);
@@ -693,6 +902,7 @@ fn buildSshPage(app: *App) !*anyopaque {
     c.cadex_label_ellipsize(title);
     c.cadex_widget_expand_h(title);
     c.cadex_box_append(head, title);
+    c.cadex_box_append(head, c.cadex_button_new("Test", sshTestClicked, app) orelse return error.GtkFailed);
     c.cadex_box_append(head, c.cadex_button_new("Refresh", sshRefreshClicked, app) orelse return error.GtkFailed);
     c.cadex_box_append(page, head);
     app.ssh_status = c.cadex_label_new("") orelse return error.GtkFailed;
@@ -713,6 +923,48 @@ fn clearAgents(app: *App) void {
         app.gpa.free(session.label);
     }
     app.agent_sessions.clearRetainingCapacity();
+}
+
+fn numberAfter(line: []const u8, needle: []const u8) ?u64 {
+    const at = std.mem.indexOf(u8, line, needle) orelse return null;
+    var start = at + needle.len;
+    while (start < line.len and (line[start] == ' ' or line[start] == '"')) start += 1;
+    var end = start;
+    while (end < line.len and line[end] >= '0' and line[end] <= '9') end += 1;
+    if (end == start) return null;
+    return std.fmt.parseInt(u64, line[start..end], 10) catch null;
+}
+
+fn inspectSession(path: [:0]const u8) struct { state: AgentState, tokens: u64 } {
+    var data: ?[*]u8 = null;
+    var len: usize = 0;
+    var status = core.cadex_explorer_read_text(path.ptr, 512 * 1024, &data, &len);
+    if (status == core.CADEX_TOO_LARGE) {
+        status = core.cadex_explorer_read_text_head(path.ptr, 512 * 1024, &data, &len, null);
+    }
+    if (status != core.CADEX_OK or data == null) return .{ .state = .idle, .tokens = 0 };
+    defer core.cadex_free(@ptrCast(data.?));
+    const text = data.?[0..len];
+    var state: AgentState = .idle;
+    var tokens: u64 = 0;
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    while (lines.next()) |line| {
+        if (std.mem.indexOf(u8, line, "\"type\":\"assistant\"") != null) state = .working;
+        if (std.mem.indexOf(u8, line, "\"type\":\"user\"") != null) state = .waiting;
+        if (std.mem.indexOf(u8, line, "\"type\":\"result\"") != null or std.mem.indexOf(u8, line, "\"is_error\":true") != null) state = .done;
+        if (numberAfter(line, "\"input_tokens\":")) |value| tokens += value;
+        if (numberAfter(line, "\"output_tokens\":")) |value| tokens += value;
+    }
+    return .{ .state = state, .tokens = tokens };
+}
+
+fn stateName(state: AgentState) []const u8 {
+    return switch (state) {
+        .idle => "idle",
+        .working => "working",
+        .waiting => "waiting",
+        .done => "done",
+    };
 }
 
 fn refreshAgents(app: *App) void {
@@ -761,7 +1013,10 @@ fn refreshAgents(app: *App) void {
                 app.gpa.free(full_z);
                 continue;
             }
-            const label = std.fmt.allocPrint(app.gpa, "{s}/{s}", .{ project, name }) catch {
+            const inspected = inspectSession(full_z);
+            const label = std.fmt.allocPrint(app.gpa, "{s}/{s}  ·  {s}  ·  {d}k", .{
+                project, name, stateName(inspected.state), inspected.tokens / 1000,
+            }) catch {
                 app.gpa.free(full_z);
                 continue;
             };
@@ -769,6 +1024,8 @@ fn refreshAgents(app: *App) void {
                 .path = full_z,
                 .label = label,
                 .mtime = @intCast(mtime),
+                .state = inspected.state,
+                .tokens = inspected.tokens,
             }) catch {
                 app.gpa.free(full_z);
                 app.gpa.free(label);
@@ -825,6 +1082,64 @@ fn agentsRefreshClicked(user: ?*anyopaque) callconv(.c) void {
 fn clearSsh(app: *App) void {
     for (app.ssh_hosts.items) |host| app.gpa.free(host);
     app.ssh_hosts.clearRetainingCapacity();
+    app.ssh_statuses.clearRetainingCapacity();
+    app.ssh_selected = null;
+    app.ssh_probed = 0;
+    app.ssh_up = 0;
+}
+
+fn rebuildSshRows(app: *App) void {
+    c.cadex_listbox_clear(app.ssh_list);
+    for (app.ssh_hosts.items, 0..) |host, index| {
+        const mark = if (index < app.ssh_statuses.items.len) switch (app.ssh_statuses.items[index]) {
+            1 => "  up",
+            2 => "  down",
+            else => "  …",
+        } else "  …";
+        const label = std.fmt.allocPrintSentinel(app.gpa, "{s}{s}", .{ host, mark }, 0) catch continue;
+        defer app.gpa.free(label);
+        c.cadex_listbox_append(app.ssh_list, label.ptr);
+    }
+}
+
+fn updateSshStatus(app: *App) void {
+    var buf: [128]u8 = undefined;
+    const text = if (app.ssh_hosts.items.len == 0)
+        "No hosts in ~/.ssh/config"
+    else
+        std.fmt.bufPrintZ(&buf, "Hosts: {d} · {d} up · {d}/{d} tested", .{
+            app.ssh_hosts.items.len, app.ssh_up, app.ssh_probed, app.ssh_hosts.items.len,
+        }) catch "SSH";
+    c.cadex_label_set(app.ssh_status, text.ptr);
+}
+
+fn onSshProbe(host: [*c]const u8, ok: c_int, user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user orelse return));
+    if (host == null or app.closing) return;
+    const name = std.mem.span(@as([*:0]const u8, @ptrCast(host)));
+    for (app.ssh_hosts.items, 0..) |known, index| {
+        if (!std.mem.eql(u8, known, name)) continue;
+        if (index >= app.ssh_statuses.items.len) return;
+        app.ssh_statuses.items[index] = if (ok != 0) 1 else 2;
+        app.ssh_probed += 1;
+        if (ok != 0) app.ssh_up += 1;
+        break;
+    }
+    rebuildSshRows(app);
+    updateSshStatus(app);
+}
+
+fn probeSsh(app: *App) void {
+    app.ssh_probed = 0;
+    app.ssh_up = 0;
+    for (app.ssh_statuses.items) |*status| status.* = 0;
+    rebuildSshRows(app);
+    updateSshStatus(app);
+    for (app.ssh_hosts.items) |host| {
+        const z = app.gpa.dupeZ(u8, host) catch continue;
+        defer app.gpa.free(z);
+        c.cadex_ssh_probe(z.ptr, onSshProbe, app);
+    }
 }
 
 fn refreshSsh(app: *App) void {
@@ -866,17 +1181,10 @@ fn refreshSsh(app: *App) void {
             };
         }
     }
-    for (app.ssh_hosts.items) |host| {
-        const z = app.gpa.dupeZ(u8, host) catch continue;
-        defer app.gpa.free(z);
-        c.cadex_listbox_append(app.ssh_list, z.ptr);
-    }
-    var buf: [96]u8 = undefined;
-    const status = if (app.ssh_hosts.items.len == 0)
-        "No hosts in ~/.ssh/config"
-    else
-        std.fmt.bufPrintZ(&buf, "Hosts: {d}", .{app.ssh_hosts.items.len}) catch "SSH";
-    c.cadex_label_set(app.ssh_status, status.ptr);
+    for (app.ssh_hosts.items) |_| app.ssh_statuses.append(app.gpa, 0) catch {};
+    rebuildSshRows(app);
+    updateSshStatus(app);
+    probeSsh(app);
 }
 
 fn sshRowActivated(index: c_int, user: ?*anyopaque) callconv(.c) void {
@@ -884,6 +1192,7 @@ fn sshRowActivated(index: c_int, user: ?*anyopaque) callconv(.c) void {
     if (index < 0) return;
     const at: usize = @intCast(index);
     if (at >= app.ssh_hosts.items.len) return;
+    app.ssh_selected = at;
     const host = app.ssh_hosts.items[at];
     newTab(app, currentSpace(app)) catch return;
     const pane = app.focused orelse return;
@@ -897,6 +1206,11 @@ fn sshRowActivated(index: c_int, user: ?*anyopaque) callconv(.c) void {
 fn sshRefreshClicked(user: ?*anyopaque) callconv(.c) void {
     const app: *App = @ptrCast(@alignCast(user.?));
     refreshSsh(app);
+}
+
+fn sshTestClicked(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    probeSsh(app);
 }
 
 fn clearEntries(app: *App) void {
@@ -931,6 +1245,7 @@ fn addFilesRow(app: *App, name: []const u8, path: [:0]u8, directory: bool) void 
 
 fn refreshFiles(app: *App) void {
     if (app.closing) return;
+    app.files_selected = null;
     clearEntries(app);
     c.cadex_listbox_clear(app.files_list);
 
@@ -984,6 +1299,7 @@ fn filesRowActivated(index: c_int, user: ?*anyopaque) callconv(.c) void {
     if (at >= app.files_entries.items.len) return;
     const entry = app.files_entries.items[at];
     if (entry.path.len == 0) return;
+    app.files_selected = at;
     if (entry.directory) {
         setFilesPath(app, entry.path);
         c.cadex_listbox_focus_first(app.files_list);
@@ -1006,21 +1322,64 @@ fn filesRefreshClicked(user: ?*anyopaque) callconv(.c) void {
 
 fn newFileClicked(user: ?*anyopaque) callconv(.c) void {
     const app: *App = @ptrCast(@alignCast(user.?));
-    promptOpen(app, false);
+    promptOpen(app, .file);
 }
 
 fn newFolderClicked(user: ?*anyopaque) callconv(.c) void {
     const app: *App = @ptrCast(@alignCast(user.?));
-    promptOpen(app, true);
+    promptOpen(app, .folder);
 }
 
-fn promptOpen(app: *App, directory: bool) void {
-    app.prompt_dir = directory;
+fn filesRenameClicked(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    const index = app.files_selected orelse {
+        showMessage(app, "Select a file first");
+        return;
+    };
+    if (index >= app.files_entries.items.len) return;
+    const entry = app.files_entries.items[index];
+    if (entry.path.len == 0) return;
+    if (app.prompt_target) |old| app.gpa.free(old);
+    app.prompt_target = app.gpa.dupeZ(u8, entry.path) catch null;
+    promptOpen(app, .rename);
+}
+
+fn filesDeleteClicked(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    const index = app.files_selected orelse {
+        showMessage(app, "Select a file first");
+        return;
+    };
+    if (index >= app.files_entries.items.len) return;
+    const entry = app.files_entries.items[index];
+    if (entry.path.len == 0) return;
+    if (c.cadex_trash_file(entry.path.ptr) != 0) {
+        showMessage(app, "Moved to the Trash");
+        refreshFiles(app);
+    } else {
+        showMessage(app, "Could not move it to the Trash");
+    }
+}
+
+fn promptOpen(app: *App, mode: PromptMode) void {
+    app.prompt_mode = mode;
     if (app.prompt_window == null) createPrompt(app);
     const window = app.prompt_window orelse return;
     const entry = app.prompt_entry orelse return;
     c.cadex_entry_set_text(entry, "");
-    c.cadex_entry_set_placeholder(entry, if (directory) "Folder name" else "File name");
+    c.cadex_entry_set_placeholder(entry, switch (mode) {
+        .file => "File name",
+        .folder => "Folder name",
+        .rename => "New name",
+        .url => "https://example.com",
+    });
+    if (mode == .rename) {
+        if (app.prompt_target) |target| {
+            const base_z = app.gpa.dupeZ(u8, std.fs.path.basename(target)) catch return;
+            defer app.gpa.free(base_z);
+            c.cadex_entry_set_text(entry, base_z.ptr);
+        }
+    }
     c.cadex_window_present(window, 0);
     c.cadex_widget_focus(entry);
 }
@@ -1051,15 +1410,43 @@ fn promptCreate(user: ?*anyopaque) callconv(.c) void {
     if (raw == null) return;
     const text = std.mem.span(@as([*:0]const u8, @ptrCast(raw)));
     const name = std.mem.trim(u8, text, " \t");
+    if (app.prompt_mode == .url) {
+        const url_z = app.gpa.dupeZ(u8, name) catch return;
+        defer app.gpa.free(url_z);
+        if (!std.mem.startsWith(u8, name, "http://") and !std.mem.startsWith(u8, name, "https://")) {
+            showMessage(app, "The URL must start with http:// or https://");
+            return;
+        }
+        if (app.prompt_window) |window| c.cadex_window_hide(window);
+        openUrlTab(app, url_z);
+        return;
+    }
     if (name.len == 0 or std.mem.indexOfAny(u8, name, "/\\") != null) {
         showMessage(app, "Type a plain file or folder name");
+        return;
+    }
+    if (app.prompt_mode == .rename) {
+        const target = app.prompt_target orelse return;
+        const name_z = app.gpa.dupeZ(u8, name) catch return;
+        defer app.gpa.free(name_z);
+        var out: ?[*]u8 = null;
+        var out_len: usize = 0;
+        const status = core.cadex_explorer_rename(target.ptr, name_z.ptr, &out, &out_len);
+        if (out != null) core.cadex_free(@ptrCast(out.?));
+        if (status != core.CADEX_OK) {
+            showMessage(app, "Could not rename it (the name may exist)");
+            return;
+        }
+        if (app.prompt_window) |window| c.cadex_window_hide(window);
+        refreshFiles(app);
+        showMessage(app, "Renamed");
         return;
     }
     const full = std.fs.path.join(app.gpa, &.{ app.files_path, name }) catch return;
     defer app.gpa.free(full);
     const z = app.gpa.dupeZ(u8, full) catch return;
     defer app.gpa.free(z);
-    const status = if (app.prompt_dir)
+    const status = if (app.prompt_mode == .folder)
         core.cadex_explorer_create_directory(z.ptr)
     else
         core.cadex_explorer_create_file(z.ptr);
@@ -1069,7 +1456,7 @@ fn promptCreate(user: ?*anyopaque) callconv(.c) void {
     }
     if (app.prompt_window) |window| c.cadex_window_hide(window);
     refreshFiles(app);
-    showMessage(app, if (app.prompt_dir) "Folder created" else "File created");
+    showMessage(app, if (app.prompt_mode == .folder) "Folder created" else "File created");
 }
 
 fn promptCancel(user: ?*anyopaque) callconv(.c) void {
@@ -1278,6 +1665,10 @@ fn openDocument(app: *App, path: [:0]const u8, line: usize) void {
     }
 
     const title = std.fs.path.basename(path);
+    if (endsWithIgnoreCase(title, ".pdf")) {
+        openPdfTab(app, path, title);
+        return;
+    }
     switch (mediaKind(title)) {
         .image => {
             openMediaTab(app, path, title, .image);
@@ -1325,6 +1716,98 @@ fn mediaKind(name: []const u8) MediaKind {
     for (video_exts) |ext| if (endsWithIgnoreCase(name, ext)) return .video;
     for (audio_exts) |ext| if (endsWithIgnoreCase(name, ext)) return .audio;
     return .none;
+}
+
+fn openUrlTab(app: *App, url: [:0]const u8) void {
+    openWebTab(app, url, url, false);
+}
+
+fn openPdfTab(app: *App, path: [:0]const u8, title: []const u8) void {
+    openWebTab(app, title, path, true);
+}
+
+fn openWebTab(app: *App, title_text: []const u8, source: [:0]const u8, file: bool) void {
+    if (c.cadex_webkit_available() == 0) {
+        showMessage(app, "WebKitGTK is not available in this build");
+        return;
+    }
+    const gpa = app.gpa;
+    const tab = gpa.create(Tab) catch return;
+    const title = gpa.dupeZ(u8, title_text) catch return;
+    const path_copy = if (file) gpa.dupeZ(u8, source) catch return else gpa.dupeZ(u8, "") catch return;
+    const container = c.cadex_box_new() orelse return;
+    const label_box = c.cadex_box_new_h(4) orelse return;
+    const title_label = c.cadex_label_new(title.ptr) orelse return;
+    c.cadex_label_ellipsize(title_label);
+    c.cadex_widget_set_size(title_label, 160, -1);
+    c.cadex_widget_add_class(label_box, "cadex-tab-label");
+    c.cadex_box_append(label_box, title_label);
+    c.cadex_box_append(label_box, c.cadex_button_new("×", tabCloseClicked, tab) orelse return);
+    tab.* = .{
+        .app = app,
+        .space = currentSpace(app),
+        .container = container,
+        .content = undefined,
+        .label_box = label_box,
+        .title_label = title_label,
+        .kind = .document,
+    };
+    const doc = gpa.create(Doc) catch return;
+    doc.* = .{
+        .app = app,
+        .tab = tab,
+        .path = path_copy,
+        .title = title,
+        .view = undefined,
+        .buffer = undefined,
+        .scroll = undefined,
+        .language = if (file) "PDF" else "Web",
+        .virtual = true,
+        .media = true,
+    };
+    tab.doc = doc;
+    const header = c.cadex_box_new_h(6) orelse return;
+    c.cadex_widget_add_class(header, "cadex-doc-header");
+    const doc_title = c.cadex_label_new(title.ptr) orelse return;
+    c.cadex_label_ellipsize(doc_title);
+    c.cadex_widget_expand_h(doc_title);
+    c.cadex_box_append(header, doc_title);
+    c.cadex_box_append(header, c.cadex_button_new("Pick", webPickClicked, doc) orelse return);
+    c.cadex_box_append(header, c.cadex_button_new("×", tabCloseClicked, tab) orelse return);
+    c.cadex_box_append(container, header);
+    const webview = c.cadex_webview_new() orelse return;
+    _ = c.cadex_webview_enable_picker(webview, onPickMessage, doc);
+    if (file) {
+        c.cadex_webview_load_file(webview, source.ptr);
+    } else {
+        c.cadex_webview_load_uri(webview, source.ptr);
+    }
+    doc.view = webview;
+    doc.scroll = webview;
+    c.cadex_widget_expand(webview);
+    c.cadex_box_append(container, webview);
+    tab.content = webview;
+    c.cadex_notebook_append(tab.space.notebook, container, label_box);
+    tab.space.tabs.append(gpa, tab) catch return;
+    c.cadex_notebook_set_current(tab.space.notebook, @intCast(tab.space.tabs.items.len - 1));
+    app.active_doc = doc;
+    app.focused = null;
+    updateTitle(app);
+    updateStatus(app);
+}
+
+fn webPickClicked(user: ?*anyopaque) callconv(.c) void {
+    const doc: *Doc = @ptrCast(@alignCast(user.?));
+    c.cadex_webview_set_picking(doc.view, 1);
+    showMessage(doc.app, "Click an element in the page");
+}
+
+fn onPickMessage(payload: [*c]const u8, user: ?*anyopaque) callconv(.c) void {
+    const doc: *Doc = @ptrCast(@alignCast(user orelse return));
+    if (payload == null) return;
+    const text = std.mem.span(@as([*:0]const u8, @ptrCast(payload)));
+    c.cadex_clipboard_set(doc.app.window, text.ptr);
+    showMessage(doc.app, "Element copied to the clipboard");
 }
 
 fn openMediaTab(app: *App, path: [:0]const u8, title: []const u8, kind: MediaKind) void {
@@ -1464,6 +1947,8 @@ fn createDocTab(
         c.cadex_box_append(header, doc.save_button.?);
     }
     if (markdown) {
+        doc.notes_button = c.cadex_button_new("Notes", docNotesClicked, doc) orelse return error.GtkFailed;
+        c.cadex_box_append(header, doc.notes_button.?);
         doc.preview_button = c.cadex_button_new("Hide Preview", docPreviewClicked, doc) orelse return error.GtkFailed;
         c.cadex_box_append(header, doc.preview_button.?);
     }
@@ -1476,7 +1961,8 @@ fn createDocTab(
     c.cadex_text_view_set_editable(view, @intFromBool(!virtual and markdown));
     c.cadex_text_view_set_wrap(view, @intFromBool(markdown));
     c.cadex_text_view_set_text(view, text.ptr, text.len);
-    const scroller = c.cadex_scrolled_new(view) orelse return error.GtkFailed;
+    const editor_box = c.cadex_text_view_with_gutter(view) orelse view;
+    const scroller = c.cadex_scrolled_new(editor_box) orelse return error.GtkFailed;
     doc.scroll = scroller;
     var content: *anyopaque = scroller;
     if (markdown) {
@@ -1600,6 +2086,151 @@ fn docPreviewClicked(user: ?*anyopaque) callconv(.c) void {
     togglePreview(doc);
 }
 
+fn docNotesClicked(user: ?*anyopaque) callconv(.c) void {
+    const doc: *Doc = @ptrCast(@alignCast(user.?));
+    notesOpen(doc);
+}
+
+fn clearNoteRows(app: *App) void {
+    for (app.notes_rows.items) |row| {
+        if (row.path) |path| app.gpa.free(path);
+    }
+    app.notes_rows.clearRetainingCapacity();
+}
+
+fn notesOpen(doc: *Doc) void {
+    const app = doc.app;
+    app.notes_doc = doc;
+    app.notes_tries = 0;
+    if (app.notes_window == null) {
+        const window = c.cadex_window_new_dialog(app.window, "Notes", 520, 520) orelse return;
+        c.cadex_window_hide_on_close(window);
+        c.cadex_widget_on_escape(window, notesHide, app);
+        const box = c.cadex_box_new() orelse return;
+        c.cadex_widget_add_class(box, "cadex-page");
+        const title = c.cadex_label_new("Headings and backlinks") orelse return;
+        c.cadex_box_append(box, title);
+        const list = c.cadex_listbox_new() orelse return;
+        c.cadex_listbox_on_activated(list, notesRowActivated, app);
+        c.cadex_listbox_on_keys(list, notesRowActivated, app);
+        const scrolled = c.cadex_scrolled_new(list) orelse return;
+        c.cadex_widget_expand(scrolled);
+        c.cadex_box_append(box, scrolled);
+        c.cadex_box_append(box, c.cadex_button_new("Close", notesHide, app) orelse return);
+        c.cadex_window_child(window, box);
+        app.notes_window = window;
+        app.notes_list = list;
+    }
+    refreshNotes(app);
+    if (app.notes_window) |window| c.cadex_window_present(window, 0);
+    if (app.notes_list) |list| c.cadex_listbox_focus_first(list);
+}
+
+fn refreshNotes(app: *App) void {
+    const list = app.notes_list orelse return;
+    const doc = app.notes_doc orelse return;
+    c.cadex_listbox_clear(list);
+    clearNoteRows(app);
+    if (app.notes_index == null) {
+        var index: ?*core.cadex_markdown_index = null;
+        if (core.cadex_markdown_index_open(app.root.ptr, &index) != core.CADEX_OK or index == null) {
+            c.cadex_listbox_append(list, "No Markdown index");
+            return;
+        }
+        app.notes_index = index;
+    }
+    const index = app.notes_index.?;
+    if (!core.cadex_markdown_index_ready(index)) {
+        if (app.notes_tries < 20) {
+            app.notes_tries += 1;
+            c.cadex_listbox_append(list, "Indexing…");
+            _ = c.cadex_timeout(250, notesRetry, app);
+        } else {
+            c.cadex_listbox_append(list, "Index is not ready");
+        }
+        return;
+    }
+    if (std.fs.path.dirname(doc.path)) |folder| {
+        const folder_z = app.gpa.dupeZ(u8, folder) catch null;
+        if (folder_z) |z| {
+            defer app.gpa.free(z);
+            core.cadex_markdown_index_focus(index, z.ptr);
+        }
+    }
+    var headings_out: ?[*]u8 = null;
+    var headings_len: usize = 0;
+    if (core.cadex_markdown_headings(index, doc.path.ptr, &headings_out, &headings_len) == core.CADEX_OK and headings_out != null) {
+        defer core.cadex_free(@ptrCast(headings_out.?));
+        var lines = std.mem.splitScalar(u8, headings_out.?[0..headings_len], '\n');
+        while (lines.next()) |line| {
+            if (line.len == 0) continue;
+            var fields = std.mem.splitScalar(u8, line, '\t');
+            const level = fields.next() orelse "1";
+            const line_text = fields.next() orelse "1";
+            const anchor = fields.next() orelse "";
+            _ = anchor;
+            const text = fields.next() orelse "";
+            const number = std.fmt.parseInt(usize, line_text, 10) catch 1;
+            app.notes_rows.append(app.gpa, .{ .kind = .heading, .line = number }) catch continue;
+            const label = std.fmt.allocPrintSentinel(app.gpa, "H{s}  {s}", .{ level, text }, 0) catch continue;
+            defer app.gpa.free(label);
+            c.cadex_listbox_append(list, label.ptr);
+        }
+    }
+    var backlinks_out: ?[*]u8 = null;
+    var backlinks_len: usize = 0;
+    if (core.cadex_markdown_backlinks(index, doc.path.ptr, &backlinks_out, &backlinks_len) == core.CADEX_OK and backlinks_out != null) {
+        defer core.cadex_free(@ptrCast(backlinks_out.?));
+        var lines = std.mem.splitScalar(u8, backlinks_out.?[0..backlinks_len], '\n');
+        while (lines.next()) |line| {
+            if (line.len == 0) continue;
+            var fields = std.mem.splitScalar(u8, line, '\t');
+            const path = fields.next() orelse continue;
+            const line_text = fields.next() orelse "1";
+            const path_z = app.gpa.dupeZ(u8, path) catch continue;
+            const number = std.fmt.parseInt(usize, line_text, 10) catch 1;
+            app.notes_rows.append(app.gpa, .{ .kind = .backlink, .line = number, .path = path_z }) catch {
+                app.gpa.free(path_z);
+                continue;
+            };
+            const label = std.fmt.allocPrintSentinel(app.gpa, "← {s}:{d}", .{ std.fs.path.basename(path), number }, 0) catch continue;
+            defer app.gpa.free(label);
+            c.cadex_listbox_append(list, label.ptr);
+        }
+    }
+    if (app.notes_rows.items.len == 0) c.cadex_listbox_append(list, "No headings or backlinks");
+}
+
+fn notesRetry(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    if (app.closing or app.notes_window == null or app.notes_doc == null) return;
+    refreshNotes(app);
+}
+
+fn notesRowActivated(index: c_int, user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    if (index < 0) return;
+    const at: usize = @intCast(index);
+    if (at >= app.notes_rows.items.len) return;
+    const row = app.notes_rows.items[at];
+    switch (row.kind) {
+        .heading => {
+            if (app.notes_doc) |doc| c.cadex_text_view_scroll_to_line(doc.view, @intCast(row.line -| 1));
+        },
+        .backlink => {
+            if (row.path) |path| {
+                if (app.notes_window) |window| c.cadex_window_hide(window);
+                openDocument(app, path, row.line -| 1);
+            }
+        },
+    }
+}
+
+fn notesHide(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    if (app.notes_window) |window| c.cadex_window_hide(window);
+}
+
 fn togglePreview(doc: *Doc) void {
     const preview = doc.preview_scroll orelse return;
     doc.preview_visible = !doc.preview_visible;
@@ -1668,6 +2299,18 @@ fn searchContentClicked(user: ?*anyopaque) callconv(.c) void {
     runContentSearch(app);
 }
 
+fn searchCancelClicked(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    if (app.search_content) |handle| {
+        core.cadex_search_content_cancel(handle);
+        app.search_content = null;
+    }
+    clearSearchHits(app, true);
+    app.search_mode = .files;
+    app.search_done = false;
+    c.cadex_label_set(app.search_status, "Cancelled");
+}
+
 fn runFileSearch(app: *App, query: []const u8) void {
     clearSearchHits(app, true);
     if (query.len == 0) {
@@ -1731,6 +2374,8 @@ fn runContentSearch(app: *App) void {
 
     var options = std.mem.zeroes(core.cadex_search_content_options);
     options.max_results = 500;
+    options.case_sensitive = app.search_case;
+    options.regex = app.search_regex;
     var callbacks = core.cadex_search_content_callbacks{
         .context = app,
         .on_hits = onSearchHits,
@@ -1941,6 +2586,15 @@ fn refreshGit(app: *App) void {
     }
 }
 
+fn gitSideDiffClicked(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    const index = app.git_selected orelse {
+        showMessage(app, "Select a file first");
+        return;
+    };
+    openSideDiff(app, index);
+}
+
 fn gitRowActivated(index: c_int, user: ?*anyopaque) callconv(.c) void {
     const app: *App = @ptrCast(@alignCast(user.?));
     if (index < 0) return;
@@ -1984,6 +2638,111 @@ fn openGitDiff(app: *App, index: usize) void {
         return;
     }
     openTextTab(app, title, "(no diff)", true);
+}
+
+fn openSideDiff(app: *App, index: usize) void {
+    const repo = app.git_repo orelse return;
+    const status = app.git_status_data orelse return;
+    if (index >= status.files.len) return;
+    const file = status.files[index];
+    const path_z = app.gpa.dupeZ(u8, file.path) catch return;
+    defer app.gpa.free(path_z);
+    const orig_z: ?[:0]u8 = if (file.orig.len > 0) app.gpa.dupeZ(u8, file.orig) catch null else null;
+    defer if (orig_z) |orig| app.gpa.free(orig);
+    var sides = std.mem.zeroes(core.cadex_git_diff_sides);
+    const rc = core.cadex_git_diff(repo.ptr, path_z.ptr, if (orig_z) |orig| orig.ptr else null, status.staged(index), &sides);
+    defer if (rc == core.CADEX_OK) core.cadex_git_diff_free(&sides);
+    const before = if (rc == core.CADEX_OK and sides.before != null) sides.before[0..sides.before_len] else "";
+    var after = if (rc == core.CADEX_OK and sides.after != null) sides.after[0..sides.after_len] else "";
+    var fallback: ?[*]u8 = null;
+    var fallback_len: usize = 0;
+    if (after.len == 0 and core.cadex_explorer_read_text(path_z.ptr, 0, &fallback, &fallback_len) == core.CADEX_OK and fallback != null) {
+        defer core.cadex_free(@ptrCast(fallback.?));
+        after = fallback.?[0..fallback_len];
+    }
+    var title_buf: [300]u8 = undefined;
+    const title = std.fmt.bufPrint(&title_buf, "diff (side): {s}", .{file.path}) catch "diff (side)";
+    openSideBySideTab(app, title, before, after);
+}
+
+fn openSideBySideTab(app: *App, title: []const u8, before: []const u8, after: []const u8) void {
+    const gpa = app.gpa;
+    const tab = gpa.create(Tab) catch return;
+    const path_copy = gpa.dupeZ(u8, "") catch return;
+    const title_copy = gpa.dupeZ(u8, title) catch return;
+    const container = c.cadex_box_new() orelse return;
+    const label_box = c.cadex_box_new_h(4) orelse return;
+    const title_label = c.cadex_label_new(title_copy.ptr) orelse return;
+    c.cadex_label_ellipsize(title_label);
+    c.cadex_widget_set_size(title_label, 160, -1);
+    c.cadex_widget_add_class(label_box, "cadex-tab-label");
+    c.cadex_box_append(label_box, title_label);
+    c.cadex_box_append(label_box, c.cadex_button_new("×", tabCloseClicked, tab) orelse return);
+    tab.* = .{
+        .app = app,
+        .space = currentSpace(app),
+        .container = container,
+        .content = undefined,
+        .label_box = label_box,
+        .title_label = title_label,
+        .kind = .document,
+    };
+    const doc = gpa.create(Doc) catch return;
+    doc.* = .{
+        .app = app,
+        .tab = tab,
+        .path = path_copy,
+        .title = title_copy,
+        .view = undefined,
+        .buffer = undefined,
+        .scroll = undefined,
+        .language = "Diff",
+        .virtual = true,
+        .media = true,
+    };
+    tab.doc = doc;
+    const header = c.cadex_box_new_h(6) orelse return;
+    c.cadex_widget_add_class(header, "cadex-doc-header");
+    const doc_title = c.cadex_label_new(title_copy.ptr) orelse return;
+    c.cadex_label_ellipsize(doc_title);
+    c.cadex_widget_expand_h(doc_title);
+    c.cadex_box_append(header, doc_title);
+    c.cadex_box_append(header, c.cadex_button_new("×", tabCloseClicked, tab) orelse return);
+    c.cadex_box_append(container, header);
+    const paned = c.cadex_paned_new(HORIZONTAL) orelse return;
+    const before_view = makeTextView(before, "Before") orelse return;
+    const after_view = makeTextView(after, "After") orelse return;
+    c.cadex_paned_set_start(paned, before_view);
+    c.cadex_paned_set_end(paned, after_view);
+    c.cadex_paned_set_position(paned, 440);
+    doc.view = before_view;
+    doc.scroll = paned;
+    c.cadex_widget_expand(paned);
+    c.cadex_box_append(container, paned);
+    tab.content = paned;
+    c.cadex_notebook_append(tab.space.notebook, container, label_box);
+    tab.space.tabs.append(gpa, tab) catch return;
+    c.cadex_notebook_set_current(tab.space.notebook, @intCast(tab.space.tabs.items.len - 1));
+    app.active_doc = doc;
+    app.focused = null;
+    updateTitle(app);
+    updateStatus(app);
+}
+
+fn makeTextView(text: []const u8, label: []const u8) ?*anyopaque {
+    const box = c.cadex_box_new() orelse return null;
+    const heading = c.cadex_label_new(@ptrCast(label.ptr)) orelse return null;
+    c.cadex_widget_add_class(heading, "cadex-doc-header");
+    c.cadex_box_append(box, heading);
+    const view = c.cadex_text_view_new() orelse return null;
+    c.cadex_text_view_set_editable(view, 0);
+    c.cadex_text_view_set_wrap(view, 0);
+    c.cadex_text_view_set_text(view, text.ptr, text.len);
+    const with_gutter = c.cadex_text_view_with_gutter(view) orelse view;
+    const scrolled = c.cadex_scrolled_new(with_gutter) orelse return null;
+    c.cadex_widget_expand(scrolled);
+    c.cadex_box_append(box, scrolled);
+    return box;
 }
 
 fn openUntracked(app: *App, path_z: [:0]const u8, title: []const u8) void {
@@ -2158,6 +2917,110 @@ fn gitRefreshClicked(user: ?*anyopaque) callconv(.c) void {
     refreshGit(app);
 }
 
+fn gitBranchesClicked(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    branchOpen(app);
+}
+
+fn gitInitClicked(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    gitInit(app);
+}
+
+fn clearBranches(app: *App) void {
+    for (app.branch_names.items) |name| app.gpa.free(name);
+    app.branch_names.clearRetainingCapacity();
+}
+
+fn branchOpen(app: *App) void {
+    if (app.branch_window == null) {
+        const window = c.cadex_window_new_dialog(app.window, "Branches", 420, 460) orelse return;
+        c.cadex_window_hide_on_close(window);
+        c.cadex_widget_on_escape(window, branchHide, app);
+        const box = c.cadex_box_new() orelse return;
+        c.cadex_widget_add_class(box, "cadex-page");
+        const title = c.cadex_label_new("Local branches") orelse return;
+        c.cadex_box_append(box, title);
+        const list = c.cadex_listbox_new() orelse return;
+        c.cadex_listbox_on_activated(list, branchRowActivated, app);
+        c.cadex_listbox_on_keys(list, branchRowActivated, app);
+        const scrolled = c.cadex_scrolled_new(list) orelse return;
+        c.cadex_widget_expand(scrolled);
+        c.cadex_box_append(box, scrolled);
+        c.cadex_box_append(box, c.cadex_button_new("Close", branchHide, app) orelse return);
+        c.cadex_window_child(window, box);
+        app.branch_window = window;
+        app.branch_list = list;
+    }
+    refreshBranches(app);
+    if (app.branch_window) |window| c.cadex_window_present(window, 0);
+    if (app.branch_list) |list| c.cadex_listbox_focus_first(list);
+}
+
+fn refreshBranches(app: *App) void {
+    const list = app.branch_list orelse return;
+    c.cadex_listbox_clear(list);
+    clearBranches(app);
+    const repo = app.git_repo orelse {
+        c.cadex_listbox_append(list, "No git repository");
+        return;
+    };
+    var out: ?[*]u8 = null;
+    var len: usize = 0;
+    if (core.cadex_git_branches(repo.ptr, &out, &len) != core.CADEX_OK or out == null) {
+        c.cadex_listbox_append(list, "Could not list branches");
+        return;
+    }
+    defer core.cadex_free(@ptrCast(out.?));
+    var lines = std.mem.splitScalar(u8, out.?[0..len], '\n');
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+        var fields = std.mem.splitScalar(u8, line, '\t');
+        const kind = fields.next() orelse continue;
+        if (!std.mem.eql(u8, kind, "local")) continue;
+        const name = fields.next() orelse continue;
+        const copy = app.gpa.dupe(u8, name) catch continue;
+        app.branch_names.append(app.gpa, copy) catch {
+            app.gpa.free(copy);
+            continue;
+        };
+        const current = if (app.git_status_data) |status| std.mem.eql(u8, status.branch, name) else false;
+        const label = if (current)
+            std.fmt.allocPrintSentinel(app.gpa, "{s}  (current)", .{name}, 0) catch name
+        else
+            app.gpa.dupeZ(u8, name) catch name;
+        defer app.gpa.free(label);
+        c.cadex_listbox_append(list, @ptrCast(label.ptr));
+    }
+}
+
+fn branchRowActivated(index: c_int, user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    if (index < 0) return;
+    const at: usize = @intCast(index);
+    if (at >= app.branch_names.items.len) return;
+    const repo = app.git_repo orelse return;
+    const z = app.gpa.dupeZ(u8, app.branch_names.items[at]) catch return;
+    defer app.gpa.free(z);
+    var message: ?[*]u8 = null;
+    var len: usize = 0;
+    const status = core.cadex_git_switch(repo.ptr, z.ptr, false, &message, &len);
+    if (app.branch_window) |window| c.cadex_window_hide(window);
+    finishGit(app, status, message, len, "Branch switched");
+}
+
+fn branchHide(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user.?));
+    if (app.branch_window) |window| c.cadex_window_hide(window);
+}
+
+fn gitInit(app: *App) void {
+    var message: ?[*]u8 = null;
+    var len: usize = 0;
+    const status = core.cadex_git_init(app.root.ptr, &message, &len);
+    finishGit(app, status, message, len, "Repository initialized");
+}
+
 fn clearHistory(app: *App) void {
     for (app.history_commits.items) |record| documents.git.freeCommit(app.gpa, record);
     app.history_commits.clearRetainingCapacity();
@@ -2230,6 +3093,7 @@ fn historyRowActivated(index: c_int, user: ?*anyopaque) callconv(.c) void {
     if (index < 0) return;
     const at: usize = @intCast(index);
     if (at >= app.history_commits.items.len) return;
+    app.history_selected = at;
     showCommit(app, at);
 }
 
@@ -2283,6 +3147,11 @@ fn historyMoreClicked(user: ?*anyopaque) callconv(.c) void {
     loadHistory(app, true);
 }
 
+fn trayActivated(user: ?*anyopaque) callconv(.c) void {
+    const app: *App = @ptrCast(@alignCast(user orelse return));
+    c.cadex_window_present(app.window, 0);
+}
+
 fn closeCb(user: ?*anyopaque) callconv(.c) c_int {
     const app: *App = @ptrCast(@alignCast(user.?));
     app.closing = true;
@@ -2316,13 +3185,11 @@ fn closeCb(user: ?*anyopaque) callconv(.c) c_int {
     }
     for (app.spaces.items) |space| {
         for (space.tabs.items) |tab| {
-            for (tab.panes) |maybe| {
-                if (maybe) |pane| {
-                    pane.closed = true;
-                    if (pane.term) |term| {
-                        term.close(app.gpa);
-                        pane.term = null;
-                    }
+            for (tab.leaves.items) |pane| {
+                pane.closed = true;
+                if (pane.term) |term| {
+                    term.close(app.gpa);
+                    pane.term = null;
                 }
             }
             if (tab.doc) |doc| {
@@ -2355,6 +3222,7 @@ fn newSpace(app: *App) !void {
     try app.spaces.append(gpa, space);
     switchSpace(app, app.spaces.items.len - 1);
     try newTab(app, space);
+    saveSpaces(app);
 }
 
 fn switchSpace(app: *App, index: usize) void {
@@ -2372,6 +3240,7 @@ fn switchSpace(app: *App, index: usize) void {
     }
     updateTitle(app);
     updateStatus(app);
+    saveSpaces(app);
 }
 
 fn activateTab(app: *App, tab: *Tab) void {
@@ -2382,8 +3251,13 @@ fn activateTab(app: *App, tab: *Tab) void {
         c.cadex_widget_focus(doc.view);
     } else {
         app.active_doc = null;
-        app.focused = tab.panes[0];
-        if (tab.panes[0]) |pane| c.cadex_widget_focus(pane.area);
+        if (tab.leaves.items.len > 0) {
+            const pane = tab.leaves.items[0];
+            app.focused = pane;
+            c.cadex_widget_focus(pane.area);
+        } else {
+            app.focused = null;
+        }
     }
     updateTitle(app);
     updateStatus(app);
@@ -2417,7 +3291,8 @@ fn newTab(app: *App, space: *Space) !void {
     c.cadex_box_append(tab.label_box, c.cadex_button_new("×", tabCloseClicked, tab) orelse return error.GtkFailed);
 
     const pane = try createPane(app, tab);
-    tab.panes = .{ pane, null };
+    tab.root = pane.node;
+    try tab.leaves.append(gpa, pane);
     tab.content = pane.container;
     c.cadex_box_append(tab.container, pane.container);
     c.cadex_notebook_append(space.notebook, tab.container, tab.label_box);
@@ -2429,6 +3304,7 @@ fn newTab(app: *App, space: *Space) !void {
     c.cadex_widget_focus(pane.area);
     updateTitle(app);
     updateStatus(app);
+    saveSpaces(app);
 }
 
 fn createPane(app: *App, tab: *Tab) !*Pane {
@@ -2449,6 +3325,8 @@ fn createPane(app: *App, tab: *Tab) !*Pane {
         .title = onTitle,
         .bell = onBell,
     });
+    pane.node = try gpa.create(Node);
+    pane.node.* = .{ .kind = .leaf, .pane = pane };
     pane.container = c.cadex_box_new() orelse return error.GtkFailed;
     const header = c.cadex_box_new_h(4) orelse return error.GtkFailed;
     c.cadex_widget_add_class(header, "cadex-pane-header");
@@ -2594,7 +3472,67 @@ fn statusTimer(user: ?*anyopaque) callconv(.c) void {
     const app: *App = @ptrCast(@alignCast(user.?));
     updateTitle(app);
     updateStatus(app);
+    updateStats(app);
     if (!app.closing) _ = c.cadex_timeout(1000, statusTimer, app);
+}
+
+fn readProc(app: *App, path: [*:0]const u8) ?[]u8 {
+    var len: usize = 0;
+    const raw = c.cadex_read_file(path, &len);
+    if (raw == null) return null;
+    defer c.cadex_gtk_free(@ptrCast(raw));
+    return app.gpa.dupe(u8, raw[0..len]) catch null;
+}
+
+fn updateStats(app: *App) void {
+    if (app.closing) return;
+    var ram_pct: u32 = 0;
+    if (readProc(app, "/proc/meminfo")) |meminfo| {
+        defer app.gpa.free(meminfo);
+        var total: u64 = 0;
+        var available: u64 = 0;
+        var lines = std.mem.splitScalar(u8, meminfo, '\n');
+        while (lines.next()) |line| {
+            if (std.mem.startsWith(u8, line, "MemTotal:")) total = firstNumber(line) orelse total;
+            if (std.mem.startsWith(u8, line, "MemAvailable:")) available = firstNumber(line) orelse available;
+        }
+        if (total > 0 and available <= total) {
+            ram_pct = @intCast((total - available) * 100 / total);
+        }
+    }
+    var ports: u32 = 0;
+    for ([_][*:0]const u8{ "/proc/net/tcp", "/proc/net/tcp6" }) |path| {
+        if (readProc(app, path)) |table| {
+            defer app.gpa.free(table);
+            var lines = std.mem.splitScalar(u8, table, '\n');
+            _ = lines.next();
+            while (lines.next()) |line| {
+                var fields = std.mem.tokenizeAny(u8, line, " \t");
+                _ = fields.next();
+                _ = fields.next();
+                _ = fields.next();
+                const state = fields.next() orelse continue;
+                if (std.mem.eql(u8, state, "0A")) ports += 1;
+            }
+        }
+    }
+    var load: f64 = 0;
+    if (readProc(app, "/proc/loadavg")) |loadavg| {
+        defer app.gpa.free(loadavg);
+        var tokens = std.mem.tokenizeAny(u8, loadavg, " \t");
+        if (tokens.next()) |first| load = std.fmt.parseFloat(f64, first) catch 0;
+    }
+    var buf: [160]u8 = undefined;
+    const text = std.fmt.bufPrintZ(&buf, "{d}% RAM · {d} ports · load {d:.2}", .{ ram_pct, ports, load }) catch return;
+    c.cadex_label_set(app.stats_label, text.ptr);
+}
+
+fn firstNumber(line: []const u8) ?u64 {
+    var tokens = std.mem.tokenizeAny(u8, line, " \t");
+    while (tokens.next()) |token| {
+        if (std.fmt.parseInt(u64, token, 10)) |value| return value else |_| continue;
+    }
+    return null;
 }
 
 fn applyFont(app: *App) void {
@@ -2603,9 +3541,7 @@ fn applyFont(app: *App) void {
     updateMetrics(app);
     for (app.spaces.items) |space| {
         for (space.tabs.items) |tab| {
-            for (tab.panes) |maybe| {
-                if (maybe) |pane| schedulePaneRedraw(pane);
-            }
+            for (tab.leaves.items) |pane| schedulePaneRedraw(pane);
         }
     }
     applyTheme(app);
@@ -2614,17 +3550,15 @@ fn applyFont(app: *App) void {
 fn updateMetrics(app: *App) void {
     for (app.spaces.items) |space| {
         for (space.tabs.items) |tab| {
-            for (tab.panes) |maybe| {
-                if (maybe) |pane| {
-                    var cw: c_int = 8;
-                    var ch: c_int = 16;
-                    var asc: c_int = 12;
-                    _ = c.cadex_text_metrics(pane.area, @ptrCast(&app.font), &cw, &ch, &asc);
-                    app.cell_w = if (cw > 0) cw else 8;
-                    app.cell_h = if (ch > 0) ch else 16;
-                    app.ascent = if (asc > 0) asc else 12;
-                    return;
-                }
+            for (tab.leaves.items) |pane| {
+                var cw: c_int = 8;
+                var ch: c_int = 16;
+                var asc: c_int = 12;
+                _ = c.cadex_text_metrics(pane.area, @ptrCast(&app.font), &cw, &ch, &asc);
+                app.cell_w = if (cw > 0) cw else 8;
+                app.cell_h = if (ch > 0) ch else 16;
+                app.ascent = if (asc > 0) asc else 12;
+                return;
             }
         }
     }
@@ -2663,15 +3597,13 @@ fn applyTheme(app: *App) void {
     c.cadex_css_apply(css.ptr);
     for (app.spaces.items) |space| {
         for (space.tabs.items) |tab| {
-            for (tab.panes) |maybe| {
-                if (maybe) |pane| {
-                    if (pane.term) |term| {
-                        var colors = themeColors(theme);
-                        term.setColors(&colors);
-                        term.setCursor(CURSOR_BLOCK, app.settings.cursor_blink);
-                    }
-                    schedulePaneRedraw(pane);
+            for (tab.leaves.items) |pane| {
+                if (pane.term) |term| {
+                    var colors = themeColors(theme);
+                    term.setColors(&colors);
+                    term.setCursor(CURSOR_BLOCK, app.settings.cursor_blink);
                 }
+                schedulePaneRedraw(pane);
             }
         }
     }
@@ -2847,7 +3779,8 @@ fn handleShortcut(app: *App, keyval: c_uint, state: c_uint) bool {
         'g', 'G' => "sidebar.git",
         'h', 'H' => "sidebar.history",
         's', 'S' => "document.save",
-        'm', 'M' => "document.preview",
+        'm', 'M' => if (alt) "markdown.notes" else "document.preview",
+        'u', 'U' => if (alt) "preview.url" else null,
         ',' => "settings.open",
         'q', 'Q' => "app.quit",
         'n', 'N' => if (alt) "space.next" else "space.new",
@@ -2962,6 +3895,89 @@ fn scroll(dx: f64, dy: f64, user: ?*anyopaque) callconv(.c) void {
     schedulePaneRedraw(pane);
 }
 
+fn nodeWidget(node: *Node) *anyopaque {
+    return switch (node.kind) {
+        .leaf => node.pane.?.container,
+        .split => node.split.?.widget,
+    };
+}
+
+fn firstLeaf(node: *Node) *Pane {
+    var current = node;
+    while (current.kind == .split) current = current.split.?.first;
+    return current.pane.?;
+}
+
+fn freeTree(gpa: std.mem.Allocator, node: *Node) void {
+    if (node.kind == .split) {
+        if (node.split) |split| {
+            freeTree(gpa, split.first);
+            freeTree(gpa, split.second);
+            gpa.destroy(split);
+        }
+    }
+    gpa.destroy(node);
+}
+
+fn detachPane(app: *App, tab: *Tab, pane: *Pane) void {
+    const node = pane.node;
+    const parent = node.parent orelse {
+        closeTab(tab);
+        return;
+    };
+    const sibling = if (parent.first == node) parent.second else parent.first;
+    const sibling_widget = nodeWidget(sibling);
+    const parent_node = parent.node;
+    const grand = parent_node.parent;
+
+    for (tab.leaves.items, 0..) |item, i| {
+        if (item == pane) {
+            _ = tab.leaves.orderedRemove(i);
+            break;
+        }
+    }
+
+    // Take the surviving child out before the old GtkPaned is dropped.
+    c.cadex_widget_ref(sibling_widget);
+    if (parent.first == sibling) {
+        c.cadex_paned_set_start(parent.widget, null);
+    } else {
+        c.cadex_paned_set_end(parent.widget, null);
+    }
+    c.cadex_widget_unparent(parent.widget);
+
+    if (grand) |g| {
+        const was_first = g.first == parent_node;
+        if (was_first) {
+            g.first = sibling;
+        } else {
+            g.second = sibling;
+        }
+        sibling.parent = g;
+        if (was_first) {
+            c.cadex_paned_set_start(g.widget, sibling_widget);
+        } else {
+            c.cadex_paned_set_end(g.widget, sibling_widget);
+        }
+    } else {
+        sibling.parent = null;
+        tab.root = sibling;
+        c.cadex_box_append(tab.container, sibling_widget);
+        tab.content = sibling_widget;
+    }
+    c.cadex_widget_unref(sibling_widget);
+
+    app.gpa.destroy(parent);
+    app.gpa.destroy(parent_node);
+    app.gpa.destroy(node);
+
+    const next = firstLeaf(sibling);
+    app.focused = next;
+    c.cadex_widget_focus(next.area);
+    updateTitle(app);
+    updateStatus(app);
+}
+
 fn closePane(pane: *Pane) void {
     if (pane.closed) return;
     pane.closed = true;
@@ -2972,21 +3988,11 @@ fn closePane(pane: *Pane) void {
     const app = pane.app;
     const tab = pane.tab;
     if (tab.closed) return;
-    if (tab.panes[1] == null) {
+    if (tab.leaves.items.len <= 1) {
         closeTab(tab);
         return;
     }
-    const keep = if (tab.panes[0] == pane) tab.panes[1].? else tab.panes[0].?;
-    c.cadex_paned_set_start(tab.content, null);
-    c.cadex_paned_set_end(tab.content, null);
-    c.cadex_widget_unparent(tab.content);
-    c.cadex_box_append(tab.container, keep.container);
-    tab.content = keep.container;
-    tab.panes = .{ keep, null };
-    app.focused = keep;
-    c.cadex_widget_focus(keep.area);
-    updateTitle(app);
-    updateStatus(app);
+    detachPane(app, tab, pane);
 }
 
 fn closeTab(tab: *Tab) void {
@@ -3005,14 +4011,17 @@ fn closeTab(tab: *Tab) void {
         app.gpa.destroy(doc);
         tab.doc = null;
     }
-    for (tab.panes) |maybe| {
-        if (maybe) |pane| {
-            pane.closed = true;
-            if (pane.term) |term| {
-                term.close(app.gpa);
-                pane.term = null;
-            }
+    for (tab.leaves.items) |pane| {
+        pane.closed = true;
+        if (pane.term) |term| {
+            term.close(app.gpa);
+            pane.term = null;
         }
+    }
+    tab.leaves.deinit(app.gpa);
+    if (tab.root) |root| {
+        freeTree(app.gpa, root);
+        tab.root = null;
     }
     const index = c.cadex_notebook_page_num(tab.space.notebook, tab.container);
     if (index >= 0) c.cadex_notebook_remove(tab.space.notebook, index);
@@ -3030,28 +4039,60 @@ fn closeTab(tab: *Tab) void {
     }
     updateTitle(app);
     updateStatus(app);
+    saveSpaces(app);
 }
 
 fn splitPane(pane: *Pane, orientation: c_int) void {
     const tab = pane.tab;
     if (tab.closed or pane.closed) return;
-    if (tab.panes[1] != null) {
-        c.cadex_beep(pane.area);
-        return;
-    }
     const app = pane.app;
     const new = createPane(app, tab) catch {
         c.cadex_beep(pane.area);
         return;
     };
-    c.cadex_widget_unparent(tab.content);
     const paned = c.cadex_paned_new(orientation) orelse return;
-    c.cadex_paned_set_start(paned, tab.content);
-    c.cadex_paned_set_end(paned, new.container);
-    c.cadex_box_append(tab.container, paned);
-    tab.content = paned;
-    tab.panes[1] = new;
-    tab.orientation = orientation;
+    const split = app.gpa.create(Split) catch return;
+    const split_node = app.gpa.create(Node) catch return;
+    const node = pane.node;
+    split.* = .{
+        .orientation = orientation,
+        .widget = paned,
+        .first = node,
+        .second = new.node,
+        .node = split_node,
+    };
+    split_node.* = .{ .parent = node.parent, .kind = .split, .split = split };
+    new.node.parent = split;
+    node.parent = split;
+
+    const grand = split_node.parent;
+    c.cadex_widget_ref(pane.container);
+    if (grand) |g| {
+        const was_first = g.first == node;
+        if (was_first) {
+            c.cadex_paned_set_start(g.widget, null);
+        } else {
+            c.cadex_paned_set_end(g.widget, null);
+        }
+        c.cadex_paned_set_start(paned, pane.container);
+        c.cadex_paned_set_end(paned, new.container);
+        if (was_first) {
+            g.first = split_node;
+            c.cadex_paned_set_start(g.widget, paned);
+        } else {
+            g.second = split_node;
+            c.cadex_paned_set_end(g.widget, paned);
+        }
+    } else {
+        c.cadex_widget_unparent(pane.container);
+        c.cadex_paned_set_start(paned, pane.container);
+        c.cadex_paned_set_end(paned, new.container);
+        c.cadex_box_append(tab.container, paned);
+        tab.root = split_node;
+    }
+    c.cadex_widget_unref(pane.container);
+    tab.content = nodeWidget(tab.root.?);
+    tab.leaves.append(app.gpa, new) catch {};
     app.focused = new;
     c.cadex_widget_focus(new.area);
     updateTitle(app);
@@ -3066,6 +4107,345 @@ fn tabCloseClicked(user: ?*anyopaque) callconv(.c) void {
 fn paneCloseClicked(user: ?*anyopaque) callconv(.c) void {
     const pane: *Pane = @ptrCast(@alignCast(user.?));
     closePane(pane);
+}
+
+fn cmdExplorerOpen(app: *App) void {
+    const index = app.files_selected orelse return;
+    if (index >= app.files_entries.items.len) return;
+    const entry = app.files_entries.items[index];
+    if (entry.path.len == 0) return;
+    if (entry.directory) {
+        setFilesPath(app, entry.path);
+        c.cadex_listbox_focus_first(app.files_list);
+    } else {
+        openDocument(app, entry.path, 0);
+    }
+}
+
+fn cmdExplorerCopyPath(app: *App) void {
+    const index = app.files_selected orelse return;
+    if (index >= app.files_entries.items.len) return;
+    const entry = app.files_entries.items[index];
+    if (entry.path.len == 0) return;
+    c.cadex_clipboard_set(app.window, entry.path.ptr);
+    showMessage(app, "Path copied");
+}
+
+fn cmdTextCut(app: *App) void {
+    if (app.active_doc) |doc| {
+        c.cadex_text_view_cut(doc.view);
+    }
+}
+
+fn cmdTextUndo(app: *App) void {
+    if (app.active_doc) |doc| {
+        c.cadex_text_view_undo(doc.view);
+    }
+}
+
+fn cmdTextRedo(app: *App) void {
+    if (app.active_doc) |doc| {
+        c.cadex_text_view_redo(doc.view);
+    }
+}
+
+fn cmdAppHide(app: *App) void {
+    c.cadex_window_minimize(app.window);
+}
+
+fn cmdExplorerCopyRelative(app: *App) void {
+    const index = app.files_selected orelse return;
+    if (index >= app.files_entries.items.len) return;
+    const entry = app.files_entries.items[index];
+    const relative = if (std.mem.startsWith(u8, entry.path, app.root)) entry.path[app.root.len..] else entry.path;
+    const z = app.gpa.dupeZ(u8, if (relative.len > 0 and relative[0] == '/') relative[1..] else relative) catch return;
+    defer app.gpa.free(z);
+    c.cadex_clipboard_set(app.window, z.ptr);
+    showMessage(app, "Relative path copied");
+}
+
+fn cmdExplorerOpenTerminal(app: *App) void {
+    const index = app.files_selected orelse {
+        showMessage(app, "Select a folder first");
+        return;
+    };
+    if (index >= app.files_entries.items.len) return;
+    const entry = app.files_entries.items[index];
+    const dir = if (entry.directory) entry.path else (std.fs.path.dirname(entry.path) orelse app.files_path);
+    newTab(app, currentSpace(app)) catch return;
+    const pane = app.focused orelse return;
+    const term = pane.term orelse return;
+    const command = std.fmt.allocPrint(app.gpa, "cd '{s}'\n", .{dir}) catch return;
+    defer app.gpa.free(command);
+    term.write(command);
+    showMessage(app, "Terminal opened in the folder");
+}
+
+fn cmdGitReveal(app: *App) void {
+    const index = app.git_selected orelse return;
+    const status = app.git_status_data orelse return;
+    if (index >= status.files.len) return;
+    const full = std.fs.path.join(app.gpa, &.{ app.root, status.files[index].path }) catch return;
+    defer app.gpa.free(full);
+    const dir = std.fs.path.dirname(full) orelse app.root;
+    const dir_z = app.gpa.dupeZ(u8, dir) catch return;
+    defer app.gpa.free(dir_z);
+    _ = c.cadex_open_path(dir_z.ptr);
+}
+
+fn cmdExplorerReveal(app: *App) void {
+    const index = app.files_selected orelse {
+        const dir_z = app.gpa.dupeZ(u8, app.files_path) catch return;
+        defer app.gpa.free(dir_z);
+        _ = c.cadex_open_path(dir_z.ptr);
+        return;
+    };
+    if (index >= app.files_entries.items.len) return;
+    const entry = app.files_entries.items[index];
+    const dir = if (entry.directory) entry.path else (std.fs.path.dirname(entry.path) orelse app.files_path);
+    const dir_z = app.gpa.dupeZ(u8, dir) catch return;
+    defer app.gpa.free(dir_z);
+    _ = c.cadex_open_path(dir_z.ptr);
+}
+
+fn cmdGitStage(app: *App) void {
+    gitStageClicked(@ptrCast(app));
+}
+
+fn cmdGitUnstage(app: *App) void {
+    gitUnstageClicked(@ptrCast(app));
+}
+
+fn cmdGitDiscard(app: *App) void {
+    gitDiscardClicked(@ptrCast(app));
+}
+
+fn cmdGitPush(app: *App) void {
+    gitPushClicked(@ptrCast(app));
+}
+
+fn cmdGitPull(app: *App) void {
+    gitPullClicked(@ptrCast(app));
+}
+
+fn cmdGitFetch(app: *App) void {
+    gitFetchClicked(@ptrCast(app));
+}
+
+fn cmdGitOpenDiff(app: *App) void {
+    if (app.git_selected) |index| openGitDiff(app, index);
+}
+
+fn cmdGitStageAll(app: *App) void {
+    const repo = app.git_repo orelse return;
+    const status = app.git_status_data orelse return;
+    var zs: std.ArrayList([:0]u8) = .empty;
+    defer {
+        for (zs.items) |z| app.gpa.free(z);
+        zs.deinit(app.gpa);
+    }
+    var ptrs: std.ArrayList([*c]const u8) = .empty;
+    defer ptrs.deinit(app.gpa);
+    for (status.files) |file| addGitPath(app, file.path, &zs, &ptrs);
+    if (ptrs.items.len == 0) return;
+    var message: ?[*]u8 = null;
+    var len: usize = 0;
+    const rc = core.cadex_git_stage(repo.ptr, @ptrCast(ptrs.items.ptr), ptrs.items.len, &message, &len);
+    finishGit(app, rc, message, len, "Staged all");
+}
+
+fn cmdGitUnstageAll(app: *App) void {
+    const repo = app.git_repo orelse return;
+    const status = app.git_status_data orelse return;
+    var zs: std.ArrayList([:0]u8) = .empty;
+    defer {
+        for (zs.items) |z| app.gpa.free(z);
+        zs.deinit(app.gpa);
+    }
+    var ptrs: std.ArrayList([*c]const u8) = .empty;
+    defer ptrs.deinit(app.gpa);
+    for (status.files) |file| addGitPath(app, file.path, &zs, &ptrs);
+    if (ptrs.items.len == 0) return;
+    var message: ?[*]u8 = null;
+    var len: usize = 0;
+    const rc = core.cadex_git_unstage(repo.ptr, @ptrCast(ptrs.items.ptr), ptrs.items.len, &message, &len);
+    finishGit(app, rc, message, len, "Unstaged all");
+}
+
+fn cmdGitOpenFile(app: *App) void {
+    const index = app.git_selected orelse return;
+    const status = app.git_status_data orelse return;
+    if (index >= status.files.len) return;
+    const full = std.fs.path.join(app.gpa, &.{ app.root, status.files[index].path }) catch return;
+    defer app.gpa.free(full);
+    const z = app.gpa.dupeZ(u8, full) catch return;
+    defer app.gpa.free(z);
+    openDocument(app, z, 0);
+}
+
+fn cyclePane(app: *App, direction: isize) void {
+    if (app.active_doc != null) return;
+    const pane = app.focused orelse return;
+    const leaves = pane.tab.leaves.items;
+    if (leaves.len == 0) return;
+    var at: isize = 0;
+    for (leaves, 0..) |leaf, index| {
+        if (leaf == pane) at = @intCast(index);
+    }
+    const count: isize = @intCast(leaves.len);
+    at = @mod(at + direction, count);
+    const next = leaves[@intCast(at)];
+    app.focused = next;
+    c.cadex_widget_focus(next.area);
+    updateTitle(app);
+    updateStatus(app);
+}
+
+fn cmdPaneNext(app: *App) void {
+    cyclePane(app, 1);
+}
+
+fn cmdPanePrev(app: *App) void {
+    cyclePane(app, -1);
+}
+
+fn cmdPowerKeepAwake(app: *App) void {
+    if (app.power_pid == 0) cmdTogglePower(app);
+}
+
+fn cmdPowerAllowSleep(app: *App) void {
+    if (app.power_pid > 0) cmdTogglePower(app);
+}
+
+fn webPreviewDoc(app: *App) ?*Doc {
+    const doc = app.active_doc orelse return null;
+    if (std.mem.eql(u8, doc.language, "Web") or std.mem.eql(u8, doc.language, "PDF")) return doc;
+    return null;
+}
+
+fn cmdPreviewBack(app: *App) void {
+    if (webPreviewDoc(app)) |doc| c.cadex_webview_back(doc.view);
+}
+
+fn cmdPreviewForward(app: *App) void {
+    if (webPreviewDoc(app)) |doc| c.cadex_webview_forward(doc.view);
+}
+
+fn cmdPreviewReload(app: *App) void {
+    if (webPreviewDoc(app)) |doc| c.cadex_webview_reload(doc.view);
+}
+
+fn cmdSearchFiles(app: *App) void {
+    openSidebarPage(app, "search");
+    app.search_mode = .files;
+    const raw = c.cadex_entry_text(app.search_entry);
+    if (raw != null) runFileSearch(app, std.mem.span(@as([*:0]const u8, @ptrCast(raw))));
+}
+
+fn cmdSearchContent(app: *App) void {
+    openSidebarPage(app, "search");
+    app.search_mode = .content;
+    runContentSearch(app);
+}
+
+fn cmdThemeNext(app: *App) void {
+    app.theme_index = (app.theme_index + 1) % themes.len;
+    applyTheme(app);
+    saveSettings(app);
+}
+
+fn cmdThemeDark(app: *App) void {
+    for (themes, 0..) |theme, index| {
+        if (!theme.dark) continue;
+        app.theme_index = index;
+        applyTheme(app);
+        saveSettings(app);
+        return;
+    }
+}
+
+fn cmdThemeLight(app: *App) void {
+    for (themes, 0..) |theme, index| {
+        if (theme.dark) continue;
+        app.theme_index = index;
+        applyTheme(app);
+        saveSettings(app);
+        return;
+    }
+}
+
+fn cmdWindowNew(app: *App) void {
+    newSpace(app) catch {};
+}
+
+fn cmdTerminalScrollTop(app: *App) void {
+    const pane = app.focused orelse return;
+    if (pane.term) |term| {
+        term.scrollTop();
+        schedulePaneRedraw(pane);
+    }
+}
+
+fn cmdTerminalScrollBottom(app: *App) void {
+    const pane = app.focused orelse return;
+    if (pane.term) |term| {
+        term.scrollBottom();
+        schedulePaneRedraw(pane);
+    }
+}
+
+fn cmdTerminalClear(app: *App) void {
+    const pane = app.focused orelse return;
+    if (pane.term) |term| term.write("\x0c");
+}
+
+fn cmdHistoryCopySha(app: *App) void {
+    const index = app.history_selected orelse return;
+    if (index >= app.history_commits.items.len) return;
+    const sha = app.history_commits.items[index].sha;
+    const z = app.gpa.dupeZ(u8, sha) catch return;
+    defer app.gpa.free(z);
+    c.cadex_clipboard_set(app.window, z.ptr);
+    showMessage(app, "Commit SHA copied");
+}
+
+fn cmdHistoryOpenRemote(app: *App) void {
+    const index = app.history_selected orelse return;
+    if (index >= app.history_commits.items.len) return;
+    const repo = app.git_repo orelse return;
+    const sha = app.history_commits.items[index].sha;
+    const sha_z = app.gpa.dupeZ(u8, sha) catch return;
+    defer app.gpa.free(sha_z);
+    var out: ?[*]u8 = null;
+    var len: usize = 0;
+    if (core.cadex_history_remote_url(repo.ptr, sha_z.ptr, &out, &len) != core.CADEX_OK or out == null) {
+        showMessage(app, "No remote URL for this commit");
+        return;
+    }
+    defer core.cadex_free(@ptrCast(out.?));
+    const z = app.gpa.dupeZ(u8, out.?[0..len]) catch return;
+    defer app.gpa.free(z);
+    _ = c.cadex_open_uri(z.ptr);
+}
+
+fn cmdSearchToggleCase(app: *App) void {
+    app.search_case = !app.search_case;
+    showMessage(app, if (app.search_case) "Search: case sensitive" else "Search: ignore case");
+    if (app.search_mode == .content) runContentSearch(app);
+}
+
+fn cmdSearchToggleRegex(app: *App) void {
+    app.search_regex = !app.search_regex;
+    showMessage(app, if (app.search_regex) "Search: regex" else "Search: plain text");
+    if (app.search_mode == .content) runContentSearch(app);
+}
+
+fn cmdHistoryCurrentBranch(app: *App) void {
+    if (app.git_status_data) |status| {
+        showMessage(app, if (status.branch.len > 0) status.branch else "(detached)");
+    } else {
+        showMessage(app, "No git repository");
+    }
 }
 
 fn cmdNewTab(app: *App) void {
@@ -3243,12 +4623,34 @@ fn cmdTogglePreview(app: *App) void {
     if (app.active_doc) |doc| togglePreview(doc);
 }
 
+fn cmdMarkdownNotes(app: *App) void {
+    if (app.active_doc) |doc| notesOpen(doc);
+}
+
+fn cmdOpenUrl(app: *App) void {
+    promptOpen(app, .url);
+}
+
+fn cmdTestPick(app: *App) void {
+    const doc = app.active_doc orelse return;
+    if (!std.mem.eql(u8, doc.language, "Web") and !std.mem.eql(u8, doc.language, "PDF")) return;
+    c.cadex_webview_test_pick(doc.view);
+}
+
 fn cmdNewFile(app: *App) void {
-    promptOpen(app, false);
+    promptOpen(app, .file);
 }
 
 fn cmdNewFolder(app: *App) void {
-    promptOpen(app, true);
+    promptOpen(app, .folder);
+}
+
+fn cmdRenameFile(app: *App) void {
+    filesRenameClicked(app);
+}
+
+fn cmdDeleteFile(app: *App) void {
+    filesDeleteClicked(app);
 }
 
 fn cmdRefreshExplorer(app: *App) void {
@@ -3259,6 +4661,18 @@ fn cmdGitCommitMessage(app: *App) void {
     openSidebarPage(app, "git");
     c.cadex_widget_focus(app.git_commit_entry);
     showMessage(app, "Type a commit message and press Enter");
+}
+
+fn cmdGitBranches(app: *App) void {
+    branchOpen(app);
+}
+
+fn cmdGitSideDiff(app: *App) void {
+    if (app.git_selected) |index| openSideDiff(app, index);
+}
+
+fn cmdGitInit(app: *App) void {
+    gitInit(app);
 }
 
 fn cmdRefreshGit(app: *App) void {
@@ -3321,6 +4735,12 @@ fn settingsClicked(user: ?*anyopaque) callconv(.c) void {
 
 fn runCommand(app: *App, id: []const u8) void {
     for (commands) |command| {
+        if (std.mem.eql(u8, command.id, id)) {
+            command.run(app);
+            return;
+        }
+    }
+    for (command_aliases) |command| {
         if (std.mem.eql(u8, command.id, id)) {
             command.run(app);
             return;
@@ -3553,8 +4973,8 @@ fn settingsBlinkClicked(user: ?*anyopaque) callconv(.c) void {
     if (app.settings_blink) |button| c.cadex_button_set_text(button, if (app.settings.cursor_blink) "On" else "Off");
     for (app.spaces.items) |space| {
         for (space.tabs.items) |tab| {
-            for (tab.panes) |maybe| {
-                if (maybe) |pane| if (pane.term) |term| term.setCursor(CURSOR_BLOCK, app.settings.cursor_blink);
+            for (tab.leaves.items) |pane| {
+                if (pane.term) |term| term.setCursor(CURSOR_BLOCK, app.settings.cursor_blink);
             }
         }
     }
@@ -3577,6 +4997,87 @@ fn settingsClose(user: ?*anyopaque) callconv(.c) void {
 fn themeIndex(name: []const u8) usize {
     for (themes, 0..) |theme, i| if (std.mem.eql(u8, theme.name, name)) return i;
     return 0;
+}
+
+const SavedSpace = struct {
+    terminals: usize = 1,
+};
+
+const SavedSpaces = struct {
+    current: usize = 0,
+    spaces: []SavedSpace = &.{},
+};
+
+fn configPath(app: *App, name: []const u8) ![:0]u8 {
+    if (std.c.getenv("XDG_CONFIG_HOME")) |base_z| {
+        const base = std.mem.span(base_z);
+        const dir = try std.fmt.allocPrintSentinel(app.gpa, "{s}/cadex", .{base}, 0);
+        defer app.gpa.free(dir);
+        _ = c.cadex_make_dir(dir.ptr);
+        return std.fmt.allocPrintSentinel(app.gpa, "{s}/{s}", .{ dir, name }, 0);
+    }
+    const home_z = std.c.getenv("HOME") orelse return error.NoHome;
+    const home = std.mem.span(home_z);
+    const dir = try std.fmt.allocPrintSentinel(app.gpa, "{s}/.config/cadex", .{home}, 0);
+    defer app.gpa.free(dir);
+    _ = c.cadex_make_dir(dir.ptr);
+    return std.fmt.allocPrintSentinel(app.gpa, "{s}/{s}", .{ dir, name }, 0);
+}
+
+fn restoreSpaces(app: *App) !void {
+    app.restoring_spaces = true;
+    defer app.restoring_spaces = false;
+    const path = configPath(app, "spaces.json") catch {
+        try newSpace(app);
+        return;
+    };
+    defer app.gpa.free(path);
+    var len: usize = 0;
+    const raw = c.cadex_read_file(path.ptr, &len);
+    var parsed: ?std.json.Parsed(SavedSpaces) = null;
+    if (raw != null) {
+        defer c.cadex_gtk_free(@ptrCast(raw));
+        parsed = std.json.parseFromSlice(SavedSpaces, app.gpa, raw[0..len], .{ .ignore_unknown_fields = true }) catch null;
+    }
+    if (parsed) |*state| {
+        defer state.deinit();
+        if (state.value.spaces.len > 0) {
+            for (state.value.spaces) |saved| {
+                try newSpace(app);
+                const space = app.spaces.items[app.spaces.items.len - 1];
+                var extra: usize = 1;
+                while (extra < saved.terminals) : (extra += 1) newTab(app, space) catch break;
+            }
+            const current = @min(state.value.current, app.spaces.items.len - 1);
+            switchSpace(app, current);
+            return;
+        }
+    }
+    try newSpace(app);
+}
+
+fn saveSpaces(app: *App) void {
+    if (app.closing or app.restoring_spaces) return;
+    const path = configPath(app, "spaces.json") catch return;
+    defer app.gpa.free(path);
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(app.gpa);
+    appendFormatted(&out, app.gpa, "{{\"current\":{d},\"spaces\":[", .{app.space_index});
+    for (app.spaces.items, 0..) |space, index| {
+        var terminals: usize = 0;
+        for (space.tabs.items) |tab| {
+            if (tab.kind == .terminal) terminals += 1;
+        }
+        if (terminals == 0) terminals = 1;
+        appendFormatted(&out, app.gpa, "{s}{{\"terminals\":{d}}}", .{
+            if (index == 0) "" else ",",
+            terminals,
+        });
+    }
+    appendFormatted(&out, app.gpa, "]}}", .{});
+    const z = app.gpa.dupeZ(u8, out.items) catch return;
+    defer app.gpa.free(z);
+    _ = c.cadex_write_file(path.ptr, z.ptr, z.len);
 }
 
 fn settingsPath(app: *App) ![:0]u8 {

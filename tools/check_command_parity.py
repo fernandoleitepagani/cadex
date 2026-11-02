@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Every command of the Mac app exists in the Windows app (ADR 0005: the
-same ids on both, so settings.json and the habits carry over).
+same ids on both, so settings.json and the habits carry over); the Linux app
+is checked too, except for the ids explicitly deferred in LINUX_DEFERRED.
 
 The Mac's ids are the feature-prefixed string literals of its Swift code
-(Command(id:), the explorer's tables, the responder actions); the Windows
-ones, every such literal of its Zig code. A literal that is a name of the
-interface and not a command goes in NOT_COMMANDS.
+(Command(id:), the explorer's tables, the responder actions); the Windows and
+Linux ones, every such literal of their Zig code. A literal that is a name of
+the interface and not a command goes in NOT_COMMANDS.
 """
 import pathlib
 import re
@@ -24,6 +25,24 @@ NOT_COMMANDS = {"tabs.paneHeaders", "explorer.cell", "explorer.git-mark", "termi
 # world WebView2 lacks (docs/adr/0018-element-picker.md). The sidebar's icons
 # (plan 17) start on the Mac, 2026-10-21; so do the pane headers and
 # pane.zoom (issue #1, 2026-10-22).
+LINUX_DEFERRED = {
+    # The Cairo/Pango renderer has no fold UI or ligature switch yet.
+    "editor.fold-all", "editor.unfold-all", "terminal.toggle-ligatures",
+    # Explorer: tree collapse, file copy/paste and hidden files are pending.
+    "explorer.collapse-all", "explorer.copy-files", "explorer.paste-files",
+    "explorer.toggle-hidden",
+    # History search, and link opening from the Markdown editor.
+    "history.search", "markdown.open-link",
+    # Media zoom controls.
+    "media.zoom-actual", "media.zoom-fit", "media.zoom-in", "media.zoom-out",
+    # Spaces/tabs: rename, close, colors and MRU order.
+    "space.close", "space.rename", "space.set-color",
+    "tab.least-recently-used", "tab.rename", "tab.set-color",
+    # Theme accents/import/high contrast and workspace re-rooting.
+    "theme.accent", "theme.accent-reset", "theme.import", "theme.open-folder",
+    "theme.toggle-high-contrast", "workspace.open-folder", "workspace.use-terminal-folder",
+}
+
 MAC_ONLY = {"app.check-for-updates", "app.install-update", "app.skip-update",
             "terminal.open-pasted-image-beside", "terminal.open-pasted-image-in-tab",
             "preview.pick-element", "preview.stop-picking",
@@ -50,7 +69,14 @@ def main():
     if missing:
         print(f"{len(missing)} comando(s) faltando no Windows")
         return 1
-    print(f"paridade de comandos ok ({len(mac)} do Mac)")
+    linux = literals("apps/linux", ".zig")
+    missing_linux = sorted(mac - linux - LINUX_DEFERRED)
+    for command in missing_linux:
+        print(f"comando do Mac sem par no Linux (nem adiado): {command}")
+    if missing_linux:
+        print(f"{len(missing_linux)} comando(s) faltando no Linux")
+        return 1
+    print(f"paridade de comandos ok ({len(mac)} do Mac; Linux com {len(LINUX_DEFERRED)} adiados)")
     return 0
 
 

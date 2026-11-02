@@ -113,6 +113,8 @@ void cadex_header_widget_end(void *header, void *widget);
 void cadex_button_set_text(void *button, const char *text);
 void cadex_text_set_font(const char *font);
 void cadex_widget_unparent(void *widget);
+void cadex_widget_ref(void *widget);
+void cadex_widget_unref(void *widget);
 void cadex_widget_on_escape(void *widget, void (*fn)(void *), void *user);
 char *cadex_read_file(const char *path, size_t *len);
 int cadex_write_file(const char *path, const char *data, size_t len);
@@ -152,6 +154,7 @@ void cadex_set_dark(int dark);
 /* ---- Documents and panels (Run 4) ------------------------------------- */
 
 void *cadex_text_view_new(void);
+void *cadex_text_view_with_gutter(void *view);
 void *cadex_text_view_buffer(void *view);
 void cadex_text_view_set_editable(void *view, int editable);
 void cadex_text_view_set_wrap(void *view, int wrap);
@@ -163,6 +166,10 @@ int cadex_text_view_cursor_line(void *view);
 void cadex_text_view_select_all(void *view);
 void cadex_text_view_copy(void *view);
 void cadex_text_view_paste(void *view);
+void cadex_text_view_cut(void *view);
+void cadex_text_view_undo(void *view);
+void cadex_text_view_redo(void *view);
+void cadex_window_minimize(void *window);
 
 void cadex_text_buffer_add_tag(void *buffer, const char *name, unsigned rgb, int bold, int italic, int underline);
 void cadex_text_buffer_apply_tag(void *buffer, const char *name, int start, int end);
@@ -185,6 +192,13 @@ int cadex_webkit_available(void);
 void *cadex_webview_new(void);
 void cadex_webview_load_html(void *view, const char *html, const char *base_uri);
 void cadex_webview_load_uri(void *view, const char *uri);
+void cadex_webview_load_file(void *view, const char *path);
+int cadex_webview_enable_picker(void *view, void (*fn)(const char *payload, void *user), void *user);
+void cadex_webview_set_picking(void *view, int enable);
+void cadex_webview_test_pick(void *view);
+void cadex_webview_back(void *view);
+void cadex_webview_forward(void *view);
+void cadex_webview_reload(void *view);
 void *cadex_picture_new(const char *path);
 void *cadex_video_new(const char *path);
 int cadex_inhibit_start(const char *reason);
@@ -192,6 +206,9 @@ void cadex_inhibit_stop(int pid);
 void cadex_notify(const char *title, const char *body);
 char *cadex_list_dir(const char *path);
 int cadex_path_info(const char *path, int *is_dir, long long *mtime, long long *size);
+int cadex_trash_file(const char *path);
+void cadex_ssh_probe(const char *host, void (*fn)(const char *host, int ok, void *user), void *user);
+void cadex_tray_start(void *window, void (*fn)(void *user), void *user);
 int cadex_window_is_active(void *window);
 
 #endif
