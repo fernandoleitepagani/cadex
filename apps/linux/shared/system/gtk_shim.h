@@ -41,6 +41,7 @@ void cadex_box_append(void *box, void *child);
 void cadex_widget_visible(void *widget, int visible);
 void cadex_widget_focus(void *widget);
 void cadex_widget_expand(void *widget);
+void cadex_widget_expand_h(void *widget);
 void cadex_widget_size(void *widget, int *width, int *height);
 void cadex_queue_draw(void *widget);
 
@@ -122,6 +123,8 @@ void *cadex_listbox_new(void);
 void cadex_listbox_clear(void *box);
 void cadex_listbox_append(void *box, const char *text);
 void cadex_listbox_on_activated(void *box, void (*fn)(int index, void *user), void *user);
+void cadex_listbox_on_keys(void *box, void (*fn)(int index, void *user), void *user);
+void cadex_listbox_focus_first(void *box);
 void *cadex_scrolled_new(void *child);
 
 void *cadex_dropdown_new(const char *const *items, int count);
@@ -144,5 +147,35 @@ void cadex_widget_set_size(void *widget, int width, int height);
 void cadex_widget_add_class(void *widget, const char *name);
 void cadex_css_apply(const char *css);
 void cadex_set_dark(int dark);
+
+/* ---- Documents and panels (Run 4) ------------------------------------- */
+
+void *cadex_text_view_new(void);
+void *cadex_text_view_buffer(void *view);
+void cadex_text_view_set_editable(void *view, int editable);
+void cadex_text_view_set_wrap(void *view, int wrap);
+void cadex_text_view_set_text(void *view, const char *text, size_t len);
+char *cadex_text_view_get_text(void *view, size_t *len);
+void cadex_text_view_on_changed(void *view, cadex_simple_fn fn, void *user);
+void cadex_text_view_scroll_to_line(void *view, int line);
+int cadex_text_view_cursor_line(void *view);
+void cadex_text_view_select_all(void *view);
+void cadex_text_view_copy(void *view);
+void cadex_text_view_paste(void *view);
+
+void cadex_text_buffer_add_tag(void *buffer, const char *name, unsigned rgb, int bold, int italic, int underline);
+void cadex_text_buffer_apply_tag(void *buffer, const char *name, int start, int end);
+void cadex_text_buffer_remove_all_tags(void *buffer);
+void cadex_text_buffer_clear_tags(void *buffer);
+
+void cadex_label_set_markup_safe(void *label, const char *markup);
+void cadex_label_set_wrap(void *label, int wrap);
+void cadex_label_set_selectable(void *label, int selectable);
+void cadex_entry_set_text(void *entry, const char *text);
+void cadex_entry_set_placeholder(void *entry, const char *text);
+void cadex_widget_set_valign(void *widget, int align);
+void cadex_widget_set_halign(void *widget, int align);
+void cadex_widget_set_sensitive(void *widget, int sensitive);
+void cadex_window_on_key(void *window, cadex_key_fn fn, void *user);
 
 #endif

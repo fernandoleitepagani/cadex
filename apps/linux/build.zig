@@ -45,6 +45,14 @@ pub fn build(b: *std.Build) void {
         .imports = &.{.{ .name = "cadex", .module = cadex }},
     });
 
+    const documents = b.createModule(.{
+        .root_source_file = b.path("features/documents/documents.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .imports = &.{.{ .name = "cadex", .module = cadex }},
+    });
+
     const root = b.createModule(.{
         .root_source_file = b.path("app/main.zig"),
         .target = target,
@@ -54,6 +62,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "cadex", .module = cadex },
             .{ .name = "system", .module = system },
             .{ .name = "terminal", .module = terminal },
+            .{ .name = "documents", .module = documents },
         },
     });
     linkCore(root, b.pathFromRoot(core_lib));
@@ -68,6 +77,11 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{ .name = "cadex", .root_module = root });
     b.installArtifact(exe);
+
+    const documents_test = b.addTest(.{ .root_module = documents });
+    const run_documents_test = b.addRunArtifact(documents_test);
+    const test_step = b.step("test", "Run the Linux app's unit tests");
+    test_step.dependOn(&run_documents_test.step);
 
     const run = b.addRunArtifact(exe);
     b.step("run", "Build and run Cadex").dependOn(&run.step);

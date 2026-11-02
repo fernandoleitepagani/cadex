@@ -268,6 +268,10 @@ void cadex_widget_expand(void *widget) {
     gtk_widget_set_vexpand(GTK_WIDGET(widget), TRUE);
 }
 
+void cadex_widget_expand_h(void *widget) {
+    gtk_widget_set_hexpand(GTK_WIDGET(widget), TRUE);
+}
+
 void cadex_widget_size(void *widget, int *width, int *height) {
     if (width) *width = gtk_widget_get_width(GTK_WIDGET(widget));
     if (height) *height = gtk_widget_get_height(GTK_WIDGET(widget));
@@ -410,7 +414,6 @@ void cadex_drawing_mouse(void *area, cadex_pointer_fn pointer, cadex_scroll_fn s
 void *cadex_entry_new(void) {
     GtkWidget *entry = gtk_entry_new();
     gtk_entry_set_placeholder_text(GTK_ENTRY(entry), "Find");
-    gtk_widget_set_visible(entry, FALSE);
     return entry;
 }
 
@@ -888,4 +891,255 @@ int cadex_make_dir(const char *path) {
 
 void cadex_gtk_free(void *ptr) {
     g_free(ptr);
+}
+
+/* ---- Documents and panels (Run 4) ------------------------------------- */
+
+void *cadex_text_view_new(void) {
+    GtkWidget *view = gtk_text_view_new();
+    gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);
+    gtk_text_view_set_left_margin(GTK_TEXT_VIEW(view), 8);
+    gtk_text_view_set_right_margin(GTK_TEXT_VIEW(view), 8);
+    gtk_text_view_set_top_margin(GTK_TEXT_VIEW(view), 8);
+    gtk_text_view_set_bottom_margin(GTK_TEXT_VIEW(view), 8);
+    gtk_widget_set_vexpand(view, TRUE);
+    gtk_widget_set_hexpand(view, TRUE);
+    return view;
+}
+
+void *cadex_text_view_buffer(void *view) {
+    return gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+}
+
+void cadex_text_view_set_editable(void *view, int editable) {
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(view), editable ? TRUE : FALSE);
+}
+
+void cadex_text_view_set_wrap(void *view, int wrap) {
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view), wrap ? GTK_WRAP_WORD_CHAR : GTK_WRAP_NONE);
+}
+
+void cadex_text_view_set_text(void *view, const char *text, size_t len) {
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+    gtk_text_buffer_set_text(buffer, text ? text : "", (int)len);
+}
+
+char *cadex_text_view_get_text(void *view, size_t *len) {
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+    GtkTextIter start, end;
+    gtk_text_buffer_get_bounds(buffer, &start, &end);
+    char *text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+    if (len) *len = text ? strlen(text) : 0;
+    return text;
+}
+
+static void on_text_changed(GtkTextBuffer *buffer, gpointer user) {
+    (void)buffer;
+    CadexSimple *simple = user;
+    simple->fn(simple->user);
+}
+
+void cadex_text_view_on_changed(void *view, cadex_simple_fn fn, void *user) {
+    CadexSimple *simple = g_new0(CadexSimple, 1);
+    simple->fn = fn;
+    simple->user = user;
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+    g_signal_connect_data(buffer, "changed", G_CALLBACK(on_text_changed), simple, NULL, 0);
+}
+
+void cadex_text_view_scroll_to_line(void *view, int line) {
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+    GtkTextIter iter;
+    gtk_text_buffer_get_iter_at_line(buffer, &iter, line < 0 ? 0 : line);
+    gtk_text_buffer_place_cursor(buffer, &iter);
+    GtkTextMark *mark = gtk_text_buffer_create_mark(buffer, NULL, &iter, FALSE);
+    gtk_text_view_scroll_to_mark(GTK_TEXT_VIEW(view), mark, 0.1, TRUE, 0.0, 0.0);
+    gtk_widget_grab_focus(GTK_WIDGET(view));
+}
+
+int cadex_text_view_cursor_line(void *view) {
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+    GtkTextIter iter;
+    gtk_text_buffer_get_iter_at_mark(buffer, &iter, gtk_text_buffer_get_insert(buffer));
+    return gtk_text_iter_get_line(&iter);
+}
+
+void cadex_text_view_select_all(void *view) {
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+    GtkTextIter start, end;
+    gtk_text_buffer_get_bounds(buffer, &start, &end);
+    gtk_text_buffer_select_range(buffer, &start, &end);
+}
+
+void cadex_text_view_copy(void *view) {
+    gtk_widget_activate_action(GTK_WIDGET(view), "clipboard.copy", NULL);
+}
+
+void cadex_text_view_paste(void *view) {
+    gtk_widget_activate_action(GTK_WIDGET(view), "clipboard.paste", NULL);
+}
+
+void cadex_text_buffer_add_tag(void *buffer, const char *name, unsigned rgb, int bold, int italic, int underline) {
+    char color[16];
+    g_snprintf(color, sizeof(color), "#%06x", rgb & 0xffffffu);
+    gtk_text_buffer_create_tag(GTK_TEXT_BUFFER(buffer), name,
+        "foreground", color,
+        "weight", bold ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL,
+        "style", italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL,
+        "underline", underline ? PANGO_UNDERLINE_SINGLE : PANGO_UNDERLINE_NONE,
+        NULL);
+}
+
+void cadex_text_buffer_apply_tag(void *buffer, const char *name, int start, int end) {
+    GtkTextBuffer *buf = GTK_TEXT_BUFFER(buffer);
+    GtkTextTag *tag = gtk_text_tag_table_lookup(gtk_text_buffer_get_tag_table(buf), name);
+    if (!tag || end <= start) return;
+    GtkTextIter a, b;
+    gtk_text_buffer_get_iter_at_offset(buf, &a, start);
+    gtk_text_buffer_get_iter_at_offset(buf, &b, end);
+    gtk_text_buffer_apply_tag(buf, tag, &a, &b);
+}
+
+void cadex_text_buffer_remove_all_tags(void *buffer) {
+    GtkTextBuffer *buf = GTK_TEXT_BUFFER(buffer);
+    GtkTextIter start, end;
+    gtk_text_buffer_get_bounds(buf, &start, &end);
+    gtk_text_buffer_remove_all_tags(buf, &start, &end);
+}
+
+void cadex_label_set_markup_safe(void *label, const char *markup) {
+    PangoAttrList *attrs = NULL;
+    char *text = NULL;
+    GError *error = NULL;
+    if (markup && pango_parse_markup(markup, -1, 0, &attrs, &text, NULL, &error) && text) {
+        gtk_label_set_markup(GTK_LABEL(label), markup);
+    } else {
+        gtk_label_set_text(GTK_LABEL(label), markup ? markup : "");
+    }
+    if (attrs) pango_attr_list_unref(attrs);
+    g_free(text);
+    if (error) g_error_free(error);
+}
+
+void cadex_label_set_wrap(void *label, int wrap) {
+    gtk_label_set_wrap(GTK_LABEL(label), wrap ? TRUE : FALSE);
+    gtk_label_set_wrap_mode(GTK_LABEL(label), PANGO_WRAP_WORD_CHAR);
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+    gtk_label_set_yalign(GTK_LABEL(label), 0.0f);
+}
+
+void cadex_label_set_selectable(void *label, int selectable) {
+    gtk_label_set_selectable(GTK_LABEL(label), selectable ? TRUE : FALSE);
+}
+
+void cadex_entry_set_text(void *entry, const char *text) {
+    gtk_editable_set_text(GTK_EDITABLE(entry), text ? text : "");
+}
+
+void cadex_entry_set_placeholder(void *entry, const char *text) {
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entry), text);
+}
+
+void cadex_widget_set_valign(void *widget, int align) {
+    gtk_widget_set_valign(GTK_WIDGET(widget), (GtkAlign)align);
+}
+
+void cadex_widget_set_halign(void *widget, int align) {
+    gtk_widget_set_halign(GTK_WIDGET(widget), (GtkAlign)align);
+}
+
+void cadex_widget_set_sensitive(void *widget, int sensitive) {
+    gtk_widget_set_sensitive(GTK_WIDGET(widget), sensitive ? TRUE : FALSE);
+}
+
+typedef struct {
+    cadex_key_fn fn;
+    void *user;
+} CadexWindowKey;
+
+static gboolean on_window_key(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user) {
+    (void)controller;
+    CadexWindowKey *key = user;
+    return key->fn(keyval, keycode, (unsigned)state, key->user) ? TRUE : FALSE;
+}
+
+void cadex_window_on_key(void *window, cadex_key_fn fn, void *user) {
+    CadexWindowKey *key = g_new0(CadexWindowKey, 1);
+    key->fn = fn;
+    key->user = user;
+    GtkEventController *controller = gtk_event_controller_key_new();
+    gtk_event_controller_set_propagation_phase(controller, GTK_PHASE_CAPTURE);
+    g_signal_connect_data(controller, "key-pressed", G_CALLBACK(on_window_key), key, NULL, 0);
+    gtk_widget_add_controller(GTK_WIDGET(window), controller);
+}
+
+static void collect_tag(GtkTextTag *tag, gpointer data) {
+    g_ptr_array_add(data, tag);
+}
+
+void cadex_text_buffer_clear_tags(void *buffer) {
+    GtkTextBuffer *buf = GTK_TEXT_BUFFER(buffer);
+    GtkTextTagTable *table = gtk_text_buffer_get_tag_table(buf);
+    GPtrArray *tags = g_ptr_array_new();
+    gtk_text_tag_table_foreach(table, collect_tag, tags);
+    for (guint i = 0; i < tags->len; i++) {
+        gtk_text_tag_table_remove(table, g_ptr_array_index(tags, i));
+    }
+    g_ptr_array_unref(tags);
+}
+
+typedef struct {
+    GtkListBox *box;
+    void (*fn)(int index, void *user);
+    void *user;
+} CadexListKeys;
+
+static gboolean on_list_key(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user) {
+    (void)controller;
+    (void)keycode;
+    (void)state;
+    CadexListKeys *keys = user;
+    GtkListBox *box = keys->box;
+    if (keyval == GDK_KEY_Down || keyval == GDK_KEY_Up) {
+        int count = 0;
+        while (gtk_list_box_get_row_at_index(box, count)) count++;
+        if (count == 0) return FALSE;
+        GtkListBoxRow *row = gtk_list_box_get_selected_row(box);
+        int index = row ? gtk_list_box_row_get_index(row) : -1;
+        if (keyval == GDK_KEY_Down) index = index < 0 ? 0 : (index + 1) % count;
+        else index = index < 0 ? count - 1 : (index + count - 1) % count;
+        GtkListBoxRow *next = gtk_list_box_get_row_at_index(box, index);
+        if (next) {
+            gtk_list_box_select_row(box, next);
+            gtk_widget_grab_focus(GTK_WIDGET(box));
+        }
+        return TRUE;
+    }
+    if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter || keyval == GDK_KEY_space) {
+        GtkListBoxRow *row = gtk_list_box_get_selected_row(box);
+        if (!row) row = gtk_list_box_get_row_at_index(box, 0);
+        if (row) {
+            keys->fn(gtk_list_box_row_get_index(row), keys->user);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+void cadex_listbox_on_keys(void *box, void (*fn)(int index, void *user), void *user) {
+    CadexListKeys *keys = g_new0(CadexListKeys, 1);
+    keys->box = GTK_LIST_BOX(box);
+    keys->fn = fn;
+    keys->user = user;
+    GtkEventController *controller = gtk_event_controller_key_new();
+    gtk_event_controller_set_propagation_phase(controller, GTK_PHASE_CAPTURE);
+    g_signal_connect_data(controller, "key-pressed", G_CALLBACK(on_list_key), keys, NULL, 0);
+    gtk_widget_add_controller(GTK_WIDGET(box), controller);
+}
+
+void cadex_listbox_focus_first(void *box) {
+    GtkListBox *list = GTK_LIST_BOX(box);
+    GtkListBoxRow *row = gtk_list_box_get_row_at_index(list, 0);
+    if (row) gtk_list_box_select_row(list, row);
+    gtk_widget_grab_focus(GTK_WIDGET(box));
 }
