@@ -1,6 +1,6 @@
 # 18 — Linux: núcleo, app GTK4 e release
 
-Data: 2026-11-01 · Status: fases 0–6, backlog e casca libadwaita executados no fork (2026-11-02); restam itens ambientais no fim
+Data: 2026-11-01 · Status: fases 0–6, backlog, casca libadwaita e barra superior integrada executados no fork (2026-11-02); restam itens ambientais no fim
 
 > A fase 2 entregou o terminal com Cairo/Pango por célula (o fallback previsto no ADR
 > 0021). A fase 3 entregou abas, uma divisão por aba, paleta, temas, configurações,
