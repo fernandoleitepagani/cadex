@@ -207,8 +207,8 @@ Tamanhos da versão 2.2.1 (2026-10-22); memória medida na 0.1.0 (2026-10-19), n
 | download Linux (AppImage / .deb / .rpm) | 6,8 MB / 6,7 MB / 2,3 MB |
 | app instalado (universal: Apple Silicon e Intel) | 46 MB |
 | memória com um terminal aberto (footprint) | 66 MB |
-| memória no Linux com um terminal aberto (RSS) | 237 MB |
-| memória no Linux com um Markdown aberto (RSS) | 260 MB |
+| memória no Linux com um terminal aberto (RSS) | 236 MB |
+| memória no Linux com um Markdown aberto (RSS) | 268 MB |
 | cada aba de terminal a mais, escondida (2.2.0) | 1 MB |
 | tudo da barra lateral e da barra de status ligado (2.2.0) | +7% |
 
