@@ -163,7 +163,7 @@ do sistema e não embutem o WebKit:
 A interface Linux é libadwaita/GNOME: barra superior integrada com as abas no centro, barra
 lateral de navegação, painéis arredondados, barra de status, preferências, páginas de estado e
 toasts. O tema padrão é o **Caffeine**, com a estrutura do Cadex do macOS e a paleta do terminal
-do GNOME Console (chrome `#222226`, barra lateral `#2e2e32`, terminal `#1d1d20`,
+do GNOME Console (chrome `#222222`, barra lateral `#191919`, terminal `#1d1d20`,
 destaque `#ffe0c2`); os outros temas também colorem a interface. Sem
 `WAYLAND_DISPLAY` o app sai com uma mensagem clara; X11 e XWayland não são suportados. O
 WebKitGTK é opcional na compilação: sem ele, a prévia do Markdown usa o renderizador Pango e o resto
@@ -210,8 +210,8 @@ Tamanhos da versão 2.2.1 (2026-10-22); memória medida na 0.1.0 (2026-10-19), n
 | download Linux (AppImage / .deb / .rpm) | 6,8 MB / 6,7 MB / 2,3 MB |
 | app instalado (universal: Apple Silicon e Intel) | 46 MB |
 | memória com um terminal aberto (footprint) | 66 MB |
-| memória no Linux com um terminal aberto (RSS) | 244 MB |
-| memória no Linux com um Markdown aberto (RSS) | 277 MB |
+| memória no Linux com um terminal aberto (RSS) | 245 MB |
+| memória no Linux com um Markdown aberto (RSS) | 273 MB |
 | cada aba de terminal a mais, escondida (2.2.0) | 1 MB |
 | tudo da barra lateral e da barra de status ligado (2.2.0) | +7% |
 

@@ -1161,6 +1161,10 @@ void *cadex_image_new(const char *icon) {
     return gtk_image_new_from_icon_name(icon);
 }
 
+void *cadex_separator_new(int vertical) {
+    return gtk_separator_new(vertical ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL);
+}
+
 void cadex_widget_clip(void *widget) {
     gtk_widget_set_overflow(GTK_WIDGET(widget), GTK_OVERFLOW_HIDDEN);
 }
@@ -2266,6 +2270,16 @@ void *cadex_adw_status_page_new(const char *icon, const char *title, const char 
 #else
     (void)icon; (void)title; (void)description;
     return NULL;
+#endif
+}
+
+void cadex_adw_status_page_set(void *page, const char *icon, const char *title, const char *description) {
+#ifdef CADEX_HAS_ADW
+    adw_status_page_set_icon_name(ADW_STATUS_PAGE(page), icon);
+    adw_status_page_set_title(ADW_STATUS_PAGE(page), title);
+    adw_status_page_set_description(ADW_STATUS_PAGE(page), description);
+#else
+    (void)page; (void)icon; (void)title; (void)description;
 #endif
 }
 

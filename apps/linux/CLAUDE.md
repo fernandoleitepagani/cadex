@@ -31,12 +31,13 @@
   lateral (240 px) do painel de conteúdo, `AdwViewStack`/`AdwViewSwitcher` cuidam dos
   spaces, e há `AdwPreferencesWindow`, `AdwActionRow`/`AdwStatusPage` e toasts. A barra
   lateral é navegação (Terminal, Files, Search, Git, History, Agents, SSH) e as páginas
-  abrem na área principal, não dentro da barra.
+  abrem na área principal, não dentro da barra. Listas vazias usam `AdwStatusPage`
+  (Files, Search, Git, History, Agents e SSH).
 - spaces.json guarda os spaces e quantos terminais cada um tinha; ao abrir, o app recria
   as abas de terminal (documentos não são restaurados).
 - Doze temas embutidos (Caffeine, Caffeine Light, Cadex, Solarized, Nord, Dracula,
   Gruvbox, Tokyo Night, One Dark, Catppuccin). O Caffeine é o padrão: a interface mantém a estrutura do macOS Cadex
-  (chrome `#222226`, barra lateral `#2e2e32`, painel `#1d1d20`, destaque `#ffe0c2`) e
+  (chrome `#222222`, barra lateral `#191919`, painel `#1d1d20`, destaque `#ffe0c2`) e
   o terminal usa a paleta noturna padrão do GNOME Console (fundo `#1d1d20`, texto
   branco); os demais temas derivam a interface das cores do terminal. A paleta do tema vale para a
   interface, o terminal, o editor e a prévia WebKit; o claro/escuro é forçado pelo
@@ -85,7 +86,7 @@
   reiniciar; branch/init; renomear/lixeira; side-by-side diff.
 - `make linux-package`; conferir `dist/AppDir/cadex.png`, o `.deb` (`ar t`) e o `.rpm`
   (`rpm -qip`); rodar o AppImage com `APPIMAGE_EXTRACT_AND_RUN=1`.
-- Medir RSS com o binário ReleaseFast; hoje ~244 MB com um terminal e ~277 MB com um
+- Medir RSS com o binário ReleaseFast; hoje ~245 MB com um terminal e ~273 MB com um
   documento WebKit aberto (a casca libadwaita soma ~28 MB).
 
 ## Backlog restante

@@ -71,12 +71,12 @@ const themes = [_]Theme{
         .panel = 0x1d1d20,
         .ansi = .{ 0x241f31, 0xc01c28, 0x2ec27e, 0xf5c211, 0x1e78e4, 0x9841bb, 0x0ab9dc, 0xc0bfbc, 0x5e5c64, 0xed333b, 0x57e389, 0xf8e45c, 0x51a1ff, 0xc061cb, 0x4fd2fd, 0xf6f5f4 },
         .interface = .{
-            .chrome = 0x222226,
+            .chrome = 0x222222,
             .panel = 0x1d1d20,
-            .sidebar = 0x2e2e32,
-            .panel_border = 0x2e2e32,
+            .sidebar = 0x191919,
+            .panel_border = 0x201e18,
             .tab_active = 0x534c45,
-            .field = 0x2e2e32,
+            .field = 0x2e2e2e,
             .text = 0xeeeeee,
             .secondary_text = 0xb4b4b4,
             .accent = 0xffe0c2,
@@ -91,9 +91,9 @@ const themes = [_]Theme{
         .panel = 0xffffff,
         .ansi = .{ 0x241f31, 0xc01c28, 0x2ec27e, 0xf5c211, 0x1e78e4, 0x9841bb, 0x0ab9dc, 0xc0bfbc, 0x5e5c64, 0xed333b, 0x57e389, 0xf8e45c, 0x51a1ff, 0xc061cb, 0x4fd2fd, 0xf6f5f4 },
         .interface = .{
-            .chrome = 0xf6f5f4,
+            .chrome = 0xefefef,
             .panel = 0xffffff,
-            .sidebar = 0xebebed,
+            .sidebar = 0xe9e9e7,
             .panel_border = 0xd8d8d8,
             .tab_active = 0xd0cbc8,
             .field = 0xe3e3e3,
@@ -390,6 +390,8 @@ const App = struct {
     root: [:0]u8 = undefined,
     files_path: [:0]u8 = undefined,
     files_list: *anyopaque = undefined,
+    files_stack: ?*anyopaque = null,
+    files_empty: ?*anyopaque = null,
     files_title: *anyopaque = undefined,
     files_entries: std.ArrayList(Entry) = .empty,
     files_selected: ?usize = null,
@@ -400,6 +402,8 @@ const App = struct {
     file_search_index: ?*core.cadex_search_index = null,
     search_entry: *anyopaque = undefined,
     search_list: *anyopaque = undefined,
+    search_stack: ?*anyopaque = null,
+    search_empty: ?*anyopaque = null,
     search_status: *anyopaque = undefined,
     search_mode: SearchMode = .files,
     search_hits: std.ArrayList(SearchHit) = .empty,
@@ -414,6 +418,8 @@ const App = struct {
 
     // Source control (Run 4).
     git_list: *anyopaque = undefined,
+    git_stack: ?*anyopaque = null,
+    git_empty: ?*anyopaque = null,
     git_branch: *anyopaque = undefined,
     git_status: *anyopaque = undefined,
     git_commit_entry: *anyopaque = undefined,
@@ -426,6 +432,8 @@ const App = struct {
 
     // History (Run 4).
     history_list: *anyopaque = undefined,
+    history_stack: ?*anyopaque = null,
+    history_empty: ?*anyopaque = null,
     history_status: *anyopaque = undefined,
     history_log: ?*core.cadex_history = null,
     history_commits: std.ArrayList(documents.git.Commit) = .empty,
@@ -435,9 +443,13 @@ const App = struct {
 
     // Agents, SSH, power and notifications (Run 5).
     agents_list: *anyopaque = undefined,
+    agents_stack: ?*anyopaque = null,
+    agents_empty: ?*anyopaque = null,
     agents_status: *anyopaque = undefined,
     agent_sessions: std.ArrayList(AgentSession) = .empty,
     ssh_list: *anyopaque = undefined,
+    ssh_stack: ?*anyopaque = null,
+    ssh_empty: ?*anyopaque = null,
     ssh_status: *anyopaque = undefined,
     ssh_hosts: std.ArrayList([]u8) = .empty,
     ssh_statuses: std.ArrayList(u8) = .empty,
@@ -732,11 +744,18 @@ fn create(launch: *Launch, gtk_app: *anyopaque) !void {
     c.cadex_box_append(app.sidebar, sidebar_title);
     var project_buf: [256]u8 = undefined;
     const project_text = std.fmt.bufPrintZ(&project_buf, "{s}", .{std.fs.path.basename(app.root)}) catch "Cadex";
+    const project_row = c.cadex_box_new_h(6) orelse return error.GtkFailed;
+    c.cadex_widget_set_margins(project_row, 12, 12, 0, 10);
+    const project_icon = c.cadex_image_new("folder-symbolic") orelse return error.GtkFailed;
+    c.cadex_widget_add_class(project_icon, "dim-label");
+    c.cadex_box_append(project_row, project_icon);
     const project_label = c.cadex_label_new(project_text.ptr) orelse return error.GtkFailed;
     c.cadex_widget_add_class(project_label, "dim-label");
     c.cadex_label_set_xalign(project_label, 0);
-    c.cadex_widget_set_margins(project_label, 12, 12, 0, 10);
-    c.cadex_box_append(app.sidebar, project_label);
+    c.cadex_label_ellipsize(project_label);
+    c.cadex_widget_expand_h(project_label);
+    c.cadex_box_append(project_row, project_label);
+    c.cadex_box_append(app.sidebar, project_row);
 
     app.nav_list = c.cadex_listbox_new() orelse return error.GtkFailed;
     c.cadex_widget_add_class(app.nav_list.?, "navigation-sidebar");
@@ -1015,6 +1034,7 @@ fn buildStatusBar(app: *App) !*anyopaque {
     c.cadex_widget_set_size(app.cwd_label, 220, -1);
     c.cadex_box_append(bar, app.cwd_label);
 
+    c.cadex_box_append(bar, c.cadex_separator_new(1) orelse return error.GtkFailed);
     const branch_icon = c.cadex_image_new("view-list-symbolic") orelse return error.GtkFailed;
     c.cadex_box_append(bar, branch_icon);
     const branch = c.cadex_label_new("") orelse return error.GtkFailed;
@@ -1028,9 +1048,29 @@ fn buildStatusBar(app: *App) !*anyopaque {
 
     app.stats_label = c.cadex_label_new("") orelse return error.GtkFailed;
     c.cadex_box_append(bar, app.stats_label);
+    c.cadex_box_append(bar, c.cadex_separator_new(1) orelse return error.GtkFailed);
     app.tabs_label = c.cadex_label_new("") orelse return error.GtkFailed;
     c.cadex_box_append(bar, app.tabs_label);
     return bar;
+}
+
+fn buildListStack(list: *anyopaque, icon: [*:0]const u8, title: [*:0]const u8, description: [*:0]const u8, empty_out: *?*anyopaque) !*anyopaque {
+    const scrolled = c.cadex_scrolled_new(list) orelse return error.GtkFailed;
+    c.cadex_widget_expand(scrolled);
+    const empty = c.cadex_adw_status_page_new(icon, title, description) orelse return error.GtkFailed;
+    c.cadex_widget_expand(empty);
+    const stack = c.cadex_stack_new() orelse return error.GtkFailed;
+    c.cadex_widget_expand(stack);
+    c.cadex_stack_add(stack, scrolled, "list");
+    c.cadex_stack_add(stack, empty, "empty");
+    c.cadex_stack_set(stack, "empty");
+    empty_out.* = empty;
+    return stack;
+}
+
+fn setListState(stack: ?*anyopaque, empty: ?*anyopaque, count: usize, icon: [*:0]const u8, title: [*:0]const u8, description: [*:0]const u8) void {
+    if (empty) |page| c.cadex_adw_status_page_set(page, icon, title, description);
+    if (stack) |view| c.cadex_stack_set(view, if (count == 0) "empty" else "list");
 }
 
 fn buildFilesPage(app: *App) !*anyopaque {
@@ -1070,9 +1110,8 @@ fn buildFilesPage(app: *App) !*anyopaque {
     c.cadex_widget_add_class(app.files_list, "boxed-list");
     c.cadex_listbox_on_activated(app.files_list, filesRowActivated, app);
     c.cadex_listbox_on_keys(app.files_list, filesRowActivated, app);
-    const scrolled = c.cadex_scrolled_new(app.files_list) orelse return error.GtkFailed;
-    c.cadex_widget_expand(scrolled);
-    c.cadex_box_append(page, scrolled);
+    app.files_stack = try buildListStack(app.files_list, "folder-symbolic", "Empty folder", "Create a file or folder to get started.", &app.files_empty);
+    c.cadex_box_append(page, app.files_stack.?);
     return page;
 }
 
@@ -1091,9 +1130,12 @@ fn buildSearchPage(app: *App) !*anyopaque {
     c.cadex_widget_set_margins(entry, 0, 0, 0, 6);
     c.cadex_box_append(page, entry);
     app.search_entry = entry;
-    const modes = c.cadex_box_new_h(6) orelse return error.GtkFailed;
-    c.cadex_box_append(modes, c.cadex_button_new("Files", searchFilesClicked, app) orelse return error.GtkFailed);
-    c.cadex_box_append(modes, c.cadex_button_new("Content", searchContentClicked, app) orelse return error.GtkFailed);
+    const modes = c.cadex_box_new_h(8) orelse return error.GtkFailed;
+    const mode_group = c.cadex_box_new_h(0) orelse return error.GtkFailed;
+    c.cadex_widget_add_class(mode_group, "linked");
+    c.cadex_box_append(mode_group, c.cadex_button_new("Files", searchFilesClicked, app) orelse return error.GtkFailed);
+    c.cadex_box_append(mode_group, c.cadex_button_new("Content", searchContentClicked, app) orelse return error.GtkFailed);
+    c.cadex_box_append(modes, mode_group);
     c.cadex_box_append(modes, c.cadex_button_new("Cancel", searchCancelClicked, app) orelse return error.GtkFailed);
     app.search_status = c.cadex_label_new("Files") orelse return error.GtkFailed;
     c.cadex_label_ellipsize(app.search_status);
@@ -1106,9 +1148,8 @@ fn buildSearchPage(app: *App) !*anyopaque {
     c.cadex_widget_add_class(app.search_list, "boxed-list");
     c.cadex_listbox_on_activated(app.search_list, searchRowActivated, app);
     c.cadex_listbox_on_keys(app.search_list, searchRowActivated, app);
-    const scrolled = c.cadex_scrolled_new(app.search_list) orelse return error.GtkFailed;
-    c.cadex_widget_expand(scrolled);
-    c.cadex_box_append(page, scrolled);
+    app.search_stack = try buildListStack(app.search_list, "system-search-symbolic", "Search this workspace", "Type to filter files; press Enter to search their contents.", &app.search_empty);
+    c.cadex_box_append(page, app.search_stack.?);
     return page;
 }
 
@@ -1182,9 +1223,8 @@ fn buildGitPage(app: *App) !*anyopaque {
     c.cadex_widget_add_class(app.git_list, "boxed-list");
     c.cadex_listbox_on_activated(app.git_list, gitRowActivated, app);
     c.cadex_listbox_on_keys(app.git_list, gitRowActivated, app);
-    const scrolled = c.cadex_scrolled_new(app.git_list) orelse return error.GtkFailed;
-    c.cadex_widget_expand(scrolled);
-    c.cadex_box_append(page, scrolled);
+    app.git_stack = try buildListStack(app.git_list, "view-list-symbolic", "No repository", "Initialize one to track changes.", &app.git_empty);
+    c.cadex_box_append(page, app.git_stack.?);
     return page;
 }
 
@@ -1209,9 +1249,8 @@ fn buildHistoryPage(app: *App) !*anyopaque {
     c.cadex_widget_add_class(app.history_list, "boxed-list");
     c.cadex_listbox_on_activated(app.history_list, historyRowActivated, app);
     c.cadex_listbox_on_keys(app.history_list, historyRowActivated, app);
-    const scrolled = c.cadex_scrolled_new(app.history_list) orelse return error.GtkFailed;
-    c.cadex_widget_expand(scrolled);
-    c.cadex_box_append(page, scrolled);
+    app.history_stack = try buildListStack(app.history_list, "document-open-recent-symbolic", "No commits yet", "Commits appear here once you make the first one.", &app.history_empty);
+    c.cadex_box_append(page, app.history_stack.?);
     return page;
 }
 
@@ -1238,9 +1277,8 @@ fn buildAgentsPage(app: *App) !*anyopaque {
     c.cadex_widget_add_class(app.agents_list, "boxed-list");
     c.cadex_listbox_on_activated(app.agents_list, agentsRowActivated, app);
     c.cadex_listbox_on_keys(app.agents_list, agentsRowActivated, app);
-    const scrolled = c.cadex_scrolled_new(app.agents_list) orelse return error.GtkFailed;
-    c.cadex_widget_expand(scrolled);
-    c.cadex_box_append(page, scrolled);
+    app.agents_stack = try buildListStack(app.agents_list, "system-run-symbolic", "No Claude sessions", "Sessions appear here while Claude Code runs in this project.", &app.agents_empty);
+    c.cadex_box_append(page, app.agents_stack.?);
     return page;
 }
 
@@ -1270,9 +1308,8 @@ fn buildSshPage(app: *App) !*anyopaque {
     c.cadex_widget_add_class(app.ssh_list, "boxed-list");
     c.cadex_listbox_on_activated(app.ssh_list, sshRowActivated, app);
     c.cadex_listbox_on_keys(app.ssh_list, sshRowActivated, app);
-    const scrolled = c.cadex_scrolled_new(app.ssh_list) orelse return error.GtkFailed;
-    c.cadex_widget_expand(scrolled);
-    c.cadex_box_append(page, scrolled);
+    app.ssh_stack = try buildListStack(app.ssh_list, "network-server-symbolic", "No SSH hosts", "Add hosts to ~/.ssh/config to connect from here.", &app.ssh_empty);
+    c.cadex_box_append(page, app.ssh_stack.?);
     return page;
 }
 
@@ -1331,6 +1368,8 @@ fn refreshAgents(app: *App) void {
     c.cadex_listbox_clear(app.agents_list);
     const home_z = std.c.getenv("HOME") orelse {
         c.cadex_label_set(app.agents_status, "HOME is not set");
+        c.cadex_widget_visible(app.agents_status, 0);
+        setListState(app.agents_stack, app.agents_empty, 0, "system-run-symbolic", "No Claude sessions", "Sessions appear here while Claude Code runs in this project.");
         return;
     };
     const home = std.mem.span(home_z);
@@ -1343,6 +1382,8 @@ fn refreshAgents(app: *App) void {
     }
     const names_ptr = c.cadex_list_dir(root.ptr) orelse {
         c.cadex_label_set(app.agents_status, "No ~/.claude/projects folder");
+        c.cadex_widget_visible(app.agents_status, 0);
+        setListState(app.agents_stack, app.agents_empty, 0, "system-run-symbolic", "No Claude sessions", "Sessions appear here while Claude Code runs in this project.");
         return;
     };
     defer c.cadex_gtk_free(@ptrCast(names_ptr));
@@ -1421,8 +1462,11 @@ fn refreshAgents(app: *App) void {
     candidates.deinit(app.gpa);
 
     var buf: [96]u8 = undefined;
-    const status = std.fmt.bufPrintZ(&buf, "Sessions: {d}", .{app.agent_sessions.items.len}) catch "Agents";
+    const count = app.agent_sessions.items.len;
+    const status = std.fmt.bufPrintZ(&buf, "Sessions: {d}", .{count}) catch "Agents";
     c.cadex_label_set(app.agents_status, status.ptr);
+    c.cadex_widget_visible(app.agents_status, @intFromBool(count > 0));
+    setListState(app.agents_stack, app.agents_empty, count, "system-run-symbolic", "No Claude sessions", "Sessions appear here while Claude Code runs in this project.");
 }
 
 fn agentsRowActivated(index: c_int, user: ?*anyopaque) callconv(.c) void {
@@ -1470,6 +1514,8 @@ fn updateSshStatus(app: *App) void {
             app.ssh_hosts.items.len, app.ssh_up, app.ssh_probed, app.ssh_hosts.items.len,
         }) catch "SSH";
     c.cadex_label_set(app.ssh_status, text.ptr);
+    c.cadex_widget_visible(app.ssh_status, @intFromBool(app.ssh_hosts.items.len > 0));
+    setListState(app.ssh_stack, app.ssh_empty, app.ssh_hosts.items.len, "network-server-symbolic", "No SSH hosts", "Add hosts to ~/.ssh/config to connect from here.");
 }
 
 fn onSshProbe(host: [*c]const u8, ok: c_int, user: ?*anyopaque) callconv(.c) void {
@@ -1506,6 +1552,8 @@ fn refreshSsh(app: *App) void {
     c.cadex_listbox_clear(app.ssh_list);
     const home_z = std.c.getenv("HOME") orelse {
         c.cadex_label_set(app.ssh_status, "HOME is not set");
+        c.cadex_widget_visible(app.ssh_status, 0);
+        setListState(app.ssh_stack, app.ssh_empty, 0, "network-server-symbolic", "No SSH hosts", "Add hosts to ~/.ssh/config to connect from here.");
         return;
     };
     const path = std.fmt.allocPrintSentinel(app.gpa, "{s}/.ssh/config", .{std.mem.span(home_z)}, 0) catch return;
@@ -1514,6 +1562,8 @@ fn refreshSsh(app: *App) void {
     const raw = c.cadex_read_file(path.ptr, &len);
     if (raw == null) {
         c.cadex_label_set(app.ssh_status, "No ~/.ssh/config");
+        c.cadex_widget_visible(app.ssh_status, 0);
+        setListState(app.ssh_stack, app.ssh_empty, 0, "network-server-symbolic", "No SSH hosts", "Add hosts to ~/.ssh/config to connect from here.");
         return;
     }
     defer c.cadex_gtk_free(@ptrCast(raw));
@@ -1580,6 +1630,15 @@ fn clearEntries(app: *App) void {
     app.files_entries.clearRetainingCapacity();
 }
 
+fn formatSize(buf: *[32]u8, bytes: i64) [*:0]const u8 {
+    if (bytes < 1024) return std.fmt.bufPrintZ(buf, "{d} B", .{bytes}) catch "File";
+    const kb = @as(f64, @floatFromInt(bytes)) / 1024.0;
+    if (kb < 1024.0) return std.fmt.bufPrintZ(buf, "{d:.1} KB", .{kb}) catch "File";
+    const mb = kb / 1024.0;
+    if (mb < 1024.0) return std.fmt.bufPrintZ(buf, "{d:.1} MB", .{mb}) catch "File";
+    return std.fmt.bufPrintZ(buf, "{d:.1} GB", .{mb / 1024.0}) catch "File";
+}
+
 fn addFilesRow(app: *App, name: []const u8, path: [:0]u8, directory: bool) void {
     const title = std.fmt.allocPrintSentinel(app.gpa, "{s}{s}", .{
         name,
@@ -1599,7 +1658,16 @@ fn addFilesRow(app: *App, name: []const u8, path: [:0]u8, directory: bool) void 
         return;
     };
     const icon: [*:0]const u8 = if (directory) "folder-symbolic" else "text-x-generic-symbolic";
-    const subtitle: [*:0]const u8 = if (directory) "Folder" else "File";
+    var size_buf: [32]u8 = undefined;
+    var subtitle: [*c]const u8 = null;
+    if (!directory) {
+        var is_dir: c_int = 0;
+        var mtime: c_longlong = 0;
+        var size: c_longlong = 0;
+        if (c.cadex_path_info(path.ptr, &is_dir, &mtime, &size) != 0 and size >= 0) {
+            subtitle = formatSize(&size_buf, size);
+        }
+    }
     c.cadex_listbox_append_action(app.files_list, icon, title.ptr, subtitle);
 }
 
@@ -1612,8 +1680,7 @@ fn refreshFiles(app: *App) void {
     var listing: core.cadex_explorer_listing = std.mem.zeroes(core.cadex_explorer_listing);
     if (core.cadex_explorer_list(app.files_path.ptr, &listing) != core.CADEX_OK) {
         c.cadex_label_set(app.files_title, app.files_path.ptr);
-        const empty = app.gpa.dupeZ(u8, "") catch return;
-        addFilesRow(app, "(cannot read this folder)", empty, false);
+        setListState(app.files_stack, app.files_empty, 0, "dialog-warning-symbolic", "Cannot read this folder", "Check permissions or choose another folder.");
         return;
     }
     defer core.cadex_explorer_listing_free(&listing);
@@ -1626,7 +1693,10 @@ fn refreshFiles(app: *App) void {
         }
     }
 
-    if (listing.names == null) return;
+    if (listing.names == null) {
+        setListState(app.files_stack, app.files_empty, 0, "folder-symbolic", "Empty folder", "Create a file or folder to get started.");
+        return;
+    }
     var i: usize = 0;
     while (i < listing.count) : (i += 1) {
         const entry = listing.entries[i];
@@ -1643,6 +1713,7 @@ fn refreshFiles(app: *App) void {
     const base = std.fs.path.basename(app.root);
     const title = std.fmt.bufPrintZ(&title_buf, "{s}{s}", .{ base, relative }) catch app.files_path;
     c.cadex_label_set(app.files_title, title.ptr);
+    setListState(app.files_stack, app.files_empty, listing.count, "folder-symbolic", "Empty folder", "Create a file or folder to get started.");
 }
 
 fn setFilesPath(app: *App, path: []const u8) void {
@@ -2714,20 +2785,24 @@ fn runFileSearch(app: *App, query: []const u8) void {
     clearSearchHits(app, true);
     if (query.len == 0) {
         c.cadex_label_set(app.search_status, "Type to search files");
+        setListState(app.search_stack, app.search_empty, 0, "system-search-symbolic", "Search this workspace", "Type to filter files; press Enter to search their contents.");
         return;
     }
     const index = app.file_search_index orelse {
         c.cadex_label_set(app.search_status, "No workspace index");
+        setListState(app.search_stack, app.search_empty, 0, "system-search-symbolic", "Search unavailable", "The workspace index is still being prepared.");
         return;
     };
     var result: core.cadex_search_files_result = std.mem.zeroes(core.cadex_search_files_result);
     if (core.cadex_search_files(index, @ptrCast(query.ptr), query.len, 50, &result) != core.CADEX_OK) {
         c.cadex_label_set(app.search_status, "Search failed");
+        setListState(app.search_stack, app.search_empty, 0, "system-search-symbolic", "Search failed", "Try again or look for a different term.");
         return;
     }
     defer core.cadex_search_files_result_free(&result);
     if (result.count == 0 or result.matches == null or result.paths == null) {
         c.cadex_label_set(app.search_status, "No files");
+        setListState(app.search_stack, app.search_empty, 0, "system-search-symbolic", "No files found", "Try a different name or search the contents.");
         return;
     }
     var i: usize = 0;
@@ -2751,6 +2826,7 @@ fn runFileSearch(app: *App, query: []const u8) void {
     var buf: [128]u8 = undefined;
     const status = std.fmt.bufPrintZ(&buf, "{d} files · Enter for content", .{app.search_hits.items.len}) catch "Files";
     c.cadex_label_set(app.search_status, status.ptr);
+    setListState(app.search_stack, app.search_empty, app.search_hits.items.len, "system-search-symbolic", "No files found", "Try a different name or search the contents.");
 }
 
 fn runContentSearch(app: *App) void {
@@ -2764,12 +2840,14 @@ fn runContentSearch(app: *App) void {
     const query = std.mem.span(@as([*:0]const u8, @ptrCast(raw)));
     if (query.len == 0) {
         c.cadex_label_set(app.search_status, "Type to search content");
+        setListState(app.search_stack, app.search_empty, 0, "system-search-symbolic", "Search this workspace", "Type to search file contents; Enter starts the search.");
         return;
     }
     app.search_done = false;
     app.search_truncated = false;
     app.search_files_searched = 0;
     c.cadex_label_set(app.search_status, "Searching…");
+    setListState(app.search_stack, app.search_empty, 0, "system-search-symbolic", "Searching…", "Looking through the workspace.");
 
     var options = std.mem.zeroes(core.cadex_search_content_options);
     options.max_results = 500;
@@ -2785,6 +2863,7 @@ fn runContentSearch(app: *App) void {
         app.search_content = handle;
     } else {
         c.cadex_label_set(app.search_status, "Search failed");
+        setListState(app.search_stack, app.search_empty, 0, "system-search-symbolic", "Search failed", "Try again or look for a different term.");
     }
 }
 
@@ -2857,6 +2936,13 @@ fn searchFlushIdle(user: ?*anyopaque) callconv(.c) void {
     else
         std.fmt.bufPrintZ(&buf, "Searching… {d} hits", .{count}) catch "Searching…";
     c.cadex_label_set(app.search_status, status.ptr);
+    if (count == 0 and done) {
+        setListState(app.search_stack, app.search_empty, 0, "system-search-symbolic", "No matches", "Try another query or switch between files and content.");
+    } else if (count == 0) {
+        setListState(app.search_stack, app.search_empty, 0, "system-search-symbolic", "Searching…", "Looking through the workspace.");
+    } else {
+        setListState(app.search_stack, app.search_empty, count, "system-search-symbolic", "No matches", "Try another query or switch between files and content.");
+    }
 }
 
 fn searchRowActivated(index: c_int, user: ?*anyopaque) callconv(.c) void {
@@ -2923,6 +3009,7 @@ fn refreshGit(app: *App) void {
     if (!core.cadex_git_available()) {
         c.cadex_label_set(app.git_branch, "git is not installed");
         c.cadex_label_set(app.git_status, "");
+        setListState(app.git_stack, app.git_empty, 0, "dialog-warning-symbolic", "Git is not installed", "Install git to track changes.");
         return;
     }
     var root_out: ?[*]u8 = null;
@@ -2930,6 +3017,7 @@ fn refreshGit(app: *App) void {
     if (core.cadex_git_root(app.root.ptr, &root_out, &root_len) != core.CADEX_OK or root_out == null) {
         c.cadex_label_set(app.git_branch, "No git repository");
         c.cadex_label_set(app.git_status, "");
+        setListState(app.git_stack, app.git_empty, 0, "view-list-symbolic", "No repository", "Initialize one to track changes.");
         return;
     }
     const repo = app.gpa.dupeZ(u8, root_out.?[0..root_len]) catch {
@@ -2948,6 +3036,7 @@ fn refreshGit(app: *App) void {
     const status = app.git_status_data orelse {
         c.cadex_label_set(app.git_branch, "git status failed");
         c.cadex_label_set(app.git_status, "");
+        setListState(app.git_stack, app.git_empty, 0, "dialog-warning-symbolic", "Could not read git status", "Try refreshing, or check the repository from a terminal.");
         return;
     };
 
@@ -2978,6 +3067,7 @@ fn refreshGit(app: *App) void {
         const icon: [*:0]const u8 = if (file.kind == 3) "list-add-symbolic" else if (file.kind == 2) "dialog-warning-symbolic" else "text-x-generic-symbolic";
         c.cadex_listbox_append_action(app.git_list, icon, title.ptr, subtitle.ptr);
     }
+    setListState(app.git_stack, app.git_empty, status.files.len, "view-list-symbolic", "Working tree clean", "There are no changes to commit.");
 }
 
 fn gitSideDiffClicked(user: ?*anyopaque) callconv(.c) void {
@@ -3436,11 +3526,13 @@ fn loadHistory(app: *App, more: bool) void {
         clearHistory(app);
         const repo = app.git_repo orelse {
             c.cadex_label_set(app.history_status, "No git repository");
+            setListState(app.history_stack, app.history_empty, 0, "document-open-recent-symbolic", "No repository", "Initialize a repository to see its history.");
             return;
         };
         var log: ?*core.cadex_history = null;
         if (core.cadex_history_open(repo.ptr, "", true, &log) != core.CADEX_OK or log == null) {
             c.cadex_label_set(app.history_status, "No history");
+            setListState(app.history_stack, app.history_empty, 0, "document-open-recent-symbolic", "No history", "Commits appear here once you make the first one.");
             return;
         }
         app.history_log = log;
@@ -3488,6 +3580,7 @@ fn loadHistory(app: *App, more: bool) void {
         if (app.history_has_more) " · More" else " · end",
     }) catch "History";
     c.cadex_label_set(app.history_status, status.ptr);
+    setListState(app.history_stack, app.history_empty, app.history_commits.items.len, "document-open-recent-symbolic", "No commits yet", "Commits appear here once you make the first one.");
 }
 
 fn historyRowActivated(index: c_int, user: ?*anyopaque) callconv(.c) void {
@@ -4117,8 +4210,11 @@ fn applyTheme(app: *App) void {
         ".boxed-list {{ background-color: #{x:0>6}; border: 1px solid #{x:0>6}; border-radius: 8px; }}\n" ++
         ".boxed-list > row {{ background-color: transparent; color: #{x:0>6}; }}\n" ++
         "list.boxed-list row:selected {{ background-color: #{x:0>6}; color: #{x:0>6}; }}\n" ++
+        ".cadex-sidebar-panel list.navigation-sidebar {{ padding: 2px 6px; }}\n" ++
+        ".cadex-sidebar-panel list.navigation-sidebar > row {{ min-height: 38px; padding-top: 0; padding-bottom: 0; }}\n" ++
         ".cadex-sidebar-panel list.navigation-sidebar row:hover {{ background-color: #{x:0>6}; }}\n" ++
         ".cadex-sidebar-panel list.navigation-sidebar > row:selected {{ background-color: #{x:0>6}; color: #{x:0>6}; }}\n" ++
+        ".cadex-status separator {{ background-color: #{x:0>6}; min-width: 1px; min-height: 12px; margin: 0 2px; }}\n" ++
         "label.dim-label, .dim-label {{ color: #{x:0>6}; }}\n" ++
         "textview, textview text {{ font-family: monospace; font-size: {d}px; }}\n", .{
         ui.text,
@@ -4132,6 +4228,7 @@ fn applyTheme(app: *App) void {
         ui.field,
         ui.tab_active,
         ui.text,
+        ui.panel_border,
         ui.secondary_text,
         app.settings.font_size,
     });
