@@ -17,14 +17,17 @@ Markdown, git) é POSIX.
 ## Decisão
 - `apps/linux/` é um app novo em **Zig**, como o do Windows, sobre o mesmo núcleo e a mesma
   API C. Nada de importar arquivo de `core/`; nada de refatorar o app Windows.
-- A interface é **GTK4** com os headers do sistema por `translate-c`, o mesmo método do
-  mingw no Windows. `pkg-config` descobre GTK4 (>= 4.14), WebKitGTK 6.0 (>= 2.44),
-  GStreamer, GdkPixbuf, HarfBuzz, FreeType e fontconfig.
+- A interface é **GTK4**. Os headers do GTK não passam pelo `translate-c` com o GLib 2.88
+  (`_Pragma` nas declarações): `apps/linux/shared/system/gtk_shim.c` compila GTK/Pango e
+  expõe uma API C pequena ao Zig. A API C do núcleo continua traduzida do header.
+  `pkg-config` descobre GTK4 (>= 4.14), WebKitGTK 6.0 (>= 2.44), GStreamer, GdkPixbuf,
+  HarfBuzz, FreeType e fontconfig.
 - **Só Wayland.** Sem `WAYLAND_DISPLAY`, o app sai com uma mensagem clara. X11 e XWayland
   não são suportados nem testados.
-- O terminal desenha em **GtkGLArea**: o núcleo entrega a grade pronta
-  (`cadex_terminal_frame`), o app compõe fundos, seleção, cursor e glifos, e rasteriza os
-  runs com **Pango** num atlas de texturas. Emoji colorido usa uma página RGBA do atlas.
+- O terminal desenha a grade pronta do núcleo (`cadex_terminal_frame`). A fase 2 usa
+  **Cairo/Pango num GtkDrawingArea** (o fallback previsto); o atlas de glifos em
+  **GtkGLArea** é a otimização seguinte, quando o orçamento de peso pedir. Emoji colorido
+  usa a rasterização do Pango.
 - O editor é um **GtkTextView**: somente leitura para código, com os destaques e as dobras
   do tree-sitter do núcleo; editável para Markdown. Sem GtkSourceView.
 - Preview web em **WebKitGTK 6.0**, o mesmo papel do WebView2 no Windows
@@ -55,11 +58,13 @@ Markdown, git) é POSIX.
   não um bug.
 
 ## Consequências
-- Dependência de runtime (GTK4, WebKitGTK, GStreamer) e ~30–40 MB de RSS; o AppImage não
-  carrega o WebKit. É o preço de não reescrever uma camada de widgets.
-- O renderer GL + Pango é o maior risco técnico. A fase 2 começa com um spike de um painel;
-  se não atingir o orçamento de peso, o fallback é Cairo/Pango por célula e fica registrado
-  aqui.
+- Dependência de runtime (GTK4, WebKitGTK, GStreamer) e RSS bem acima do Mac: no Sway
+  headless, com o fallback Cairo/Pango, a fase 2 mediu ~195 MB com um terminal (o Mac mede
+  66 MB). O orçamento do Mac não é alcançado nesta fase; o atlas GL e o packaging vão medir
+  de novo e o número fica no README.
+- O renderer GL + Pango continua o maior risco técnico. A fase 2 entregou o fallback
+  Cairo/Pango por célula e o registrou aqui; o atlas GL ainda não foi medido num GPU real e
+  é a otimização seguinte.
 - O `make check` do Mac continua sendo a validação do Mac; o Linux tem CI próprio em
   Ubuntu 24.04 e Fedora 44.
 - Cada feature tem pasta própria com `CLAUDE.md` e testes, como nas outras plataformas.

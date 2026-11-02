@@ -1,6 +1,9 @@
 # 18 — Linux: núcleo, app GTK4 e release
 
-Data: 2026-11-01 · Status: proposta
+Data: 2026-11-01 · Status: fases 0–2 feitas no fork (2026-11-01); fase 3 é a próxima
+
+> A fase 2 entregou o terminal com Cairo/Pango por célula (o fallback previsto no ADR
+> 0021); o atlas GL é a otimização seguinte.
 
 ## O que eu quero
 - O Cadex nativo no Linux sobre o mesmo núcleo, só Wayland, sem Electron/Tauri.
@@ -27,7 +30,7 @@ Fases, uma por PR; o índice de PRs e os critérios de cada uma ficam na issue d
 |---|---|---|---|
 | 0 | docs | ADR 0021, este plano, manifestos | `make manifests` verde; dono aprova |
 | 1 | núcleo | build, fs, pty, inotify, shell, CI | `zig build test` verde em Ubuntu 24.04 e Fedora 44 |
-| 2 | janela e terminal | app GTK4, GL + Pango, teclado/IME/clipboard | `vim`/`htop`, IME no Mango |
+| 2 | janela e terminal | app GTK4, Cairo/Pango (fallback do atlas GL), teclado/IME/clipboard | janela, shell, digitação, busca, clipboard e cópia testados no Sway headless |
 | 3 | casca | abas, divisões, paleta, temas, configurações, atalhos, barra, spaces | paridade de comandos |
 | 4 | documentos | explorer, busca, editor, Markdown, git, histórico | abrir/editar/buscar/commitar |
 | 5 | previews e integrações | WebKitGTK, GStreamer, power, SSH, agents, updates, SNI, picker | preview, mídia, inibição, agentes |

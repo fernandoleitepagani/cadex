@@ -512,3 +512,21 @@ Simple Icons — https://github.com/simple-icons/simple-icons
 The Gemini logo in apps/macos/shared/icons/Resources/ProviderLogos, from
 simple-icons 16.35.0. CC0 1.0 Universal (public domain dedication). The logo
 is a trademark of its owner, shown only to name the provider.
+
+--------------------------------------------------------------------------------
+
+Linux app system libraries
+--------------------------
+The Linux app links these from the distribution; no source is vendored.
+
+- GTK4, GDK, GLib, GIO, Pango, Cairo: LGPL-2.1-or-later.
+  https://gitlab.gnome.org/GNOME/gtk · https://gitlab.gnome.org/GNOME/glib
+  https://gitlab.gnome.org/GNOME/pango · https://gitlab.freedesktop.org/cairo/cairo
+- Graphene: MIT. https://github.com/ebassi/graphene
+- Vulkan loader: Apache-2.0. https://github.com/KhronosGroup/Vulkan-Loader
+- HarfBuzz: MIT. https://github.com/harfbuzz/harfbuzz
+- FreeType: FTL or GPL-2.0; used under the FTL.
+  https://gitlab.freedesktop.org/freetype/freetype
+- Fontconfig: MIT-like. https://gitlab.freedesktop.org/fontconfig/fontconfig
+
+The GTK/Pango/Cairo shim in apps/linux/shared/system is Cadex's own code (MIT).
