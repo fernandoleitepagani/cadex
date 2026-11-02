@@ -17,19 +17,23 @@
 - Refatorar o app Windows para compartilhar a casca.
 
 ## Como eu quero
-- Zig com GTK4/Wayland. `build.zig` descobre GTK4/Pango/Cairo por `pkg-config` e liga
-  a libcadex.a (feito por `make linux-core`); WebKitGTK 6.0 é detectado e ligado quando o
-  webkitgtk-6.0.pc existe, com um fallback Pango quando não existe.
-- Requisitos: gtk4-devel/libgtk-4-dev, webkitgtk6.0-devel/libwebkitgtk-6.0-dev (opcional),
-  gstreamer1, pkg-config e Zig 0.16.
+- Zig com GTK4/libadwaita/Wayland. `build.zig` descobre GTK4/Pango/Cairo e libadwaita por
+  `pkg-config` e liga a libcadex.a (feito por `make linux-core`); WebKitGTK 6.0 é detectado
+  e ligado quando o webkitgtk-6.0.pc existe, com um fallback Pango quando não existe.
+- Requisitos: gtk4-devel/libgtk-4-dev, libadwaita-devel/libadwaita-1-dev,
+  webkitgtk6.0-devel/libwebkitgtk-6.0-dev (opcional), gstreamer1, pkg-config e Zig 0.16.
 - `app/main.zig`: App, Space, Tab (terminal, documento, mídia, Web/PDF) e uma árvore de
-  panes (`Node`/`Split`) com divisões recursivas; uma janela, um `GtkNotebook` por space,
-  a paleta, as configurações, os temas, a barra de status (pasta, RAM, portas, load, branch,
-  abas) e as páginas Files/Search/Git/History/Agents/SSH.
+  panes (`Node`/`Split`) com divisões recursivas. A casca é libadwaita:
+  `AdwApplicationWindow` + `AdwToolbarView`, `AdwHeaderBar`/`AdwWindowTitle`,
+  `AdwOverlaySplitView`, `AdwViewStack`/`AdwViewSwitcher` para spaces, `AdwTabView`/
+  `AdwTabBar`, `AdwPreferencesWindow`, `AdwActionRow`/`AdwStatusPage` e toasts. A barra
+  lateral é navegação (Terminal, Files, Search, Git, History, Agents, SSH) e as páginas
+  abrem na área principal, não dentro da barra.
 - spaces.json guarda os spaces e quantos terminais cada um tinha; ao abrir, o app recria
   as abas de terminal (documentos não são restaurados).
 - Dez temas embutidos (Cadex, Solarized, Nord, Dracula, Gruvbox, Tokyo Night, One Dark,
-  Catppuccin); trocar o tema reaplica terminal, editor, CSS e WebKit.
+  Catppuccin) são paletas do terminal/editor e da prévia WebKit; a interface segue o
+  claro/escuro e o destaque do sistema pelo `AdwStyleManager`.
 - `features/terminal/terminal.zig`: a porta de entrada do núcleo (sessão, frame, teclas,
   seleção, busca, link, cores, cursor, diretório).
 - `features/documents`: markdown.toPango é o fallback da prévia e git.parse* leem as listas
@@ -45,8 +49,9 @@
 - Notificações por `GNotification` no sino do terminal quando a janela não está ativa; a
   paleta tem "Test Notification". O tray é um StatusNotifierItem com DBusMenu vazio
   registrado no watcher; no GNOME/KDE não foi testado.
-- Temas embutidos aplicam cores ANSI ao terminal, cores de token ao editor, CSS à janela e
-  o mesmo esquema ao WebKit; settings.json fica em $XDG_CONFIG_HOME/cadex/settings.json.
+- A pasta, a branch e o número de abas aparecem no subtítulo do `AdwWindowTitle`; RAM,
+  portas e load ficam num popover “System” do cabeçalho. Confirmações são toasts, não uma
+  barra de status permanente. settings.json fica em $XDG_CONFIG_HOME/cadex/settings.json.
 - Atalhos: Ctrl+Shift+K paleta, T nova aba, W fechar aba, PgDn/PgUp próxima/anterior,
   D dividir à direita, Alt+D dividir abaixo, F buscar (terminal) ou conteúdo (documento),
   C/V copiar/colar, A selecionar tudo, B barra lateral, E explorer, P busca, G git,
@@ -73,8 +78,8 @@
   reiniciar; branch/init; renomear/lixeira; side-by-side diff.
 - `make linux-package`; conferir `dist/AppDir/cadex.png`, o `.deb` (`ar t`) e o `.rpm`
   (`rpm -qip`); rodar o AppImage com `APPIMAGE_EXTRACT_AND_RUN=1`.
-- Medir RSS com o binário ReleaseFast; hoje ~209 MB com um terminal e ~240 MB com um
-  documento WebKit aberto.
+- Medir RSS com o binário ReleaseFast; hoje ~237 MB com um terminal e ~260 MB com um
+  documento WebKit aberto (a casca libadwaita soma ~28 MB).
 
 ## Backlog restante
 - Atlas GL no terminal (hoje Cairo/Pango), IME CJK (sem engine no host) e seleção/roda/links

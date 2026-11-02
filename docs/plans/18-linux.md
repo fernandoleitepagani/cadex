@@ -1,6 +1,6 @@
 # 18 — Linux: núcleo, app GTK4 e release
 
-Data: 2026-11-01 · Status: fases 0–6 e o backlog executados no fork (2026-11-02); restam itens ambientais no fim
+Data: 2026-11-01 · Status: fases 0–6, backlog e casca libadwaita executados no fork (2026-11-02); restam itens ambientais no fim
 
 > A fase 2 entregou o terminal com Cairo/Pango por célula (o fallback previsto no ADR
 > 0021). A fase 3 entregou abas, uma divisão por aba, paleta, temas, configurações,
@@ -77,6 +77,7 @@ ambiente ou é uma decisão de escopo:
   rollback), página Accounts, power por D-Bus logind + idle-inhibit, aarch64 e a
   instalação/CI num runner limpo.
 - **Fora do escopo desta máquina:** macOS `make check`, GNOME/KDE e o tray visual nesses
-  ambientes.
+  ambientes. A casca libadwaita foi verificada no Sway headless; o comportamento CSD/SSD
+  varia por compositor.
 
 O backlog não bloqueia o uso diário do preview no Fedora/Wayland.

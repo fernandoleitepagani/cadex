@@ -155,12 +155,14 @@ Quem prefere pacote do sistema: `.deb` e `.rpm` ficam na
 [página de releases](https://github.com/c4duZ/cadex/releases). Os três artefatos usam as bibliotecas
 do sistema e não embutem o WebKit:
 
-- Fedora: `sudo dnf install gtk4 webkitgtk6.0 gstreamer1 gstreamer1-plugins-base`
-- Ubuntu 24.04 ou mais novo: `sudo apt install libgtk-4-1 libwebkitgtk-6.0-4 libgstreamer1.0-0 gstreamer1.0-plugins-base`
-- Para compilar: `gtk4-devel`/`libgtk-4-dev`, `webkitgtk6.0-devel`/`libwebkitgtk-6.0-dev`, Zig 0.16
-  e `make linux-core && make linux-app`.
+- Fedora: `sudo dnf install gtk4 libadwaita webkitgtk6.0 gstreamer1 gstreamer1-plugins-base`
+- Ubuntu 24.04 ou mais novo: `sudo apt install libgtk-4-1 libadwaita-1-0 libwebkitgtk-6.0-4 libgstreamer1.0-0 gstreamer1.0-plugins-base`
+- Para compilar: `gtk4-devel`/`libgtk-4-dev`, `libadwaita-devel`/`libadwaita-1-dev`,
+  `webkitgtk6.0-devel`/`libwebkitgtk-6.0-dev`, Zig 0.16 e `make linux-core && make linux-app`.
 
-Sem `WAYLAND_DISPLAY` o app sai com uma mensagem clara; X11 e XWayland não são suportados. O
+A interface Linux é libadwaita/GNOME: barra lateral de navegação, abas `AdwTabView`, preferências,
+páginas de estado e toasts; o tema claro/escuro segue o sistema. Sem `WAYLAND_DISPLAY` o app sai
+com uma mensagem clara; X11 e XWayland não são suportados. O
 WebKitGTK é opcional na compilação: sem ele, a prévia do Markdown usa o renderizador Pango e o resto
 continua funcionando.
 
@@ -202,11 +204,11 @@ Tamanhos da versão 2.2.1 (2026-10-22); memória medida na 0.1.0 (2026-10-19), n
 | download (DMG) | 9,6 MB |
 | download (ZIP do instalador) | 9,9 MB |
 | download Windows (ZIP x64 / ARM64) | 3,9 MB / 3,7 MB |
-| download Linux (AppImage / .deb / .rpm) | 6,7 MB / 6,6 MB / 2,3 MB |
+| download Linux (AppImage / .deb / .rpm) | 6,8 MB / 6,7 MB / 2,3 MB |
 | app instalado (universal: Apple Silicon e Intel) | 46 MB |
 | memória com um terminal aberto (footprint) | 66 MB |
-| memória no Linux com um terminal aberto (RSS) | 209 MB |
-| memória no Linux com um Markdown aberto (RSS) | 240 MB |
+| memória no Linux com um terminal aberto (RSS) | 237 MB |
+| memória no Linux com um Markdown aberto (RSS) | 260 MB |
 | cada aba de terminal a mais, escondida (2.2.0) | 1 MB |
 | tudo da barra lateral e da barra de status ligado (2.2.0) | +7% |
 
