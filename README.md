@@ -137,6 +137,32 @@ instalado. O preview web e os de mídia usam o WebView2, que já vem no Windows 
 
 </details>
 
+## Instalar no Linux
+
+> **Prévia.** O Linux sai na mesma release do Mac e do Windows, só em **Wayland** e com quase todas
+> as features: terminal, abas e divisões, editor, Markdown, busca, git, histórico, hosts SSH,
+> sessões do Claude e previews (web, imagem, vídeo e áudio). O seletor de elementos, o PDF, a
+> bandeja SNI e a atualização dentro do app ainda não estão nesta prévia.
+
+Um comando baixa o AppImage, confere o SHA-256 opcional e instala em `~/.local/bin`, sem root:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/c4duZ/cadex/main/apps/linux/packaging/install.sh | sh
+```
+
+Quem prefere pacote do sistema: `.deb` e `.rpm` ficam na
+[página de releases](https://github.com/c4duZ/cadex/releases). Os três artefatos usam as bibliotecas
+do sistema e não embutem o WebKit:
+
+- Fedora: `sudo dnf install gtk4 webkitgtk6.0 gstreamer1 gstreamer1-plugins-base`
+- Ubuntu 24.04 ou mais novo: `sudo apt install libgtk-4-1 libwebkitgtk-6.0-4 libgstreamer1.0-0 gstreamer1.0-plugins-base`
+- Para compilar: `gtk4-devel`/`libgtk-4-dev`, `webkitgtk6.0-devel`/`libwebkitgtk-6.0-dev`, Zig 0.16
+  e `make linux-core && make linux-app`.
+
+Sem `WAYLAND_DISPLAY` o app sai com uma mensagem clara; X11 e XWayland não são suportados. O
+WebKitGTK é opcional na compilação: sem ele, a prévia do Markdown usa o renderizador Pango e o resto
+continua funcionando.
+
 ## Atalhos
 
 Toda ação do Cadex é um comando: o **⌘K** acha e roda qualquer uma, e os atalhos podem ser trocados
@@ -175,8 +201,11 @@ Tamanhos da versão 2.2.1 (2026-10-22); memória medida na 0.1.0 (2026-10-19), n
 | download (DMG) | 9,6 MB |
 | download (ZIP do instalador) | 9,9 MB |
 | download Windows (ZIP x64 / ARM64) | 3,9 MB / 3,7 MB |
+| download Linux (AppImage / .deb / .rpm) | 6,6 MB / 6,5 MB / 2,3 MB |
 | app instalado (universal: Apple Silicon e Intel) | 46 MB |
 | memória com um terminal aberto (footprint) | 66 MB |
+| memória no Linux com um terminal aberto (RSS) | 208 MB |
+| memória no Linux com um Markdown aberto (RSS) | 237 MB |
 | cada aba de terminal a mais, escondida (2.2.0) | 1 MB |
 | tudo da barra lateral e da barra de status ligado (2.2.0) | +7% |
 

@@ -1,4 +1,4 @@
-.PHONY: check manifests core core-test linux-core linux-core-test linux-check linux-app linux-run macos-test app run relink package perf windows-core windows-core-test windows-app windows-run windows-app-test windows-package
+.PHONY: check manifests core core-test linux-core linux-core-test linux-check linux-app linux-run linux-test linux-package macos-test app run relink package perf windows-core windows-core-test windows-app windows-run windows-app-test windows-package
 
 # Run before handing work over: manifests, core tests, app tests, and the
 # Windows build (it cannot run here, but it must keep compiling).
@@ -32,6 +32,12 @@ linux-app: linux-core
 
 linux-run: linux-app
 	@cd apps/linux && zig build run
+
+linux-test: linux-core
+	@cd apps/linux && zig build test
+
+linux-package: linux-core
+	@CADEX_OUT=$(CURDIR)/apps/linux/dist apps/linux/packaging/build.sh
 
 # swift build does not notice a new libcadex.a: drop the linked binaries so
 # they link again (tests ran against an old core, 2026-10-19).

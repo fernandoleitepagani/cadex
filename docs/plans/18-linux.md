@@ -1,12 +1,13 @@
 # 18 — Linux: núcleo, app GTK4 e release
 
-Data: 2026-11-01 · Status: fases 0–4 feitas no fork (2026-11-02); fase 5 é a próxima
+Data: 2026-11-01 · Status: fases 0–5 feitas e a 6 iniciada no fork (2026-11-02); o backlog está no fim
 
 > A fase 2 entregou o terminal com Cairo/Pango por célula (o fallback previsto no ADR
 > 0021). A fase 3 entregou abas, uma divisão por aba, paleta, temas, configurações,
 > barra de status, spaces em memória e a casca da barra lateral. A fase 4 entregou
-> explorer, busca, editor, Markdown e git. O que ficou de fora está no backlog no fim
-> deste plano.
+> explorer, busca, editor, Markdown e git. A fase 5 entregou a prévia WebKit, mídia,
+> Agents, SSH, Keep Awake, notificações e os pacotes; o que ficou de fora está no backlog
+> no fim deste plano.
 
 ## O que eu quero
 - O Cadex nativo no Linux sobre o mesmo núcleo, só Wayland, sem Electron/Tauri.
@@ -36,8 +37,8 @@ Fases, uma por PR; o índice de PRs e os critérios de cada uma ficam na issue d
 | 2 | janela e terminal | app GTK4, Cairo/Pango (fallback do atlas GL), teclado/IME/clipboard | janela, shell, digitação, busca, clipboard e cópia testados no Sway headless |
 | 3 | casca | abas, uma divisão por aba, paleta, temas, configurações, atalhos, barra, spaces em memória, casca da barra lateral | janela e atalhos testados no Sway headless; paridade completa e divisões recursivas no backlog |
 | 4 | documentos | explorer em lista plana com watcher, busca de nome e conteúdo, editor com realce (Markdown editável, prévia Pango provisória), git (status, stage, commit, push/pull/fetch, diff) e histórico com detalhes | abrir, editar, salvar, buscar, diff, commit e histórico testados no Sway headless |
-| 5 | previews e integrações | WebKitGTK, GStreamer, power, SSH, agents, updates, SNI, picker | preview, mídia, inibição, agentes |
-| 6 | release | AppImage, .deb/.rpm, install.sh, CI, README | instalação limpa em um comando |
+| 5 | previews e integrações | WebKitGTK (opcional), GtkPicture/GtkVideo, Agents (JSONL), SSH, Keep Awake via systemd-inhibit, GNotification | prévia Markdown e imagem, agentes, SSH e inibição testados; picker, PDF, updates, SNI e Accounts no backlog |
+| 6 | release | AppImage, .deb/.rpm, install.sh, release.sh, CI, README | artefatos montados e inspecionados; instalação limpa e CI ainda não rodados |
 
 - `apps/linux/` segue `apps/windows/`: um build próprio que traduz `core/include/cadex.h` e
   liga a libcadex.a; pastas de feature com o mesmo nome do núcleo; shared/ só com o que
@@ -59,7 +60,7 @@ Fases, uma por PR; o índice de PRs e os critérios de cada uma ficam na issue d
 
 ## Backlog (depois da fase 5)
 
-Itens que ficaram pendentes nas fases 1–4, para não bloquear o resto do port:
+Itens que ficaram pendentes nas fases 1–5, para não bloquear o resto do port:
 
 - **Fase 1:** `make check` no macOS (dispensado no fork), workflow de CI aprovado no
   GitHub, aarch64 e o limite de `max_user_watches` do inotify.
@@ -70,9 +71,15 @@ Itens que ficaram pendentes nas fases 1–4, para não bloquear o resto do port:
   catálogo completo de temas do Mac/Windows, edição de atalhos, branch/agentes/uso na
   barra de status e a extensão do `tools/check_command_parity.py` para o app Linux.
 - **Fase 4:** árvore do explorer (hoje lista plana), renomear/mover/apagar arquivos,
-  números de linha e folds na interface, prévia WebKit e o índice de notas
-  (headings/backlinks/links) do Markdown, troca e inicialização de branch, os dois lados
-  do diff, push/pull/fetch exercitados contra um remoto, cancelamento visível da busca e
-  Ctrl+clique nos links do Markdown.
+  números de linha e folds na interface, o índice de notas (headings/backlinks/links) do
+  Markdown, troca e inicialização de branch, os dois lados do diff, push/pull/fetch
+  exercitados contra um remoto, cancelamento visível da busca e Ctrl+clique nos links.
+- **Fase 5:** element picker, preview de URL/servidor local e PDF (pdf.js), estado e
+  subagentes/uso das sessões do Claude, página Accounts, probe de SSH, notificações com um
+  daemon real, Keep Awake por D-Bus logind + idle-inhibit, tray SNI e a atualização do
+  AppImage (latest.json assinado, SHA-256, .old e rollback).
+- **Fase 6:** rodar o `../../apps/linux/packaging/install.sh` contra um release real, o workflow de CI num runner
+  limpo, assinatura dos pacotes, aarch64 e o AppImage sem depender de um appimagetool
+  externo.
 
-O backlog não entra em nenhuma das fases 4 e 5; ele é a última etapa, depois do release.
+O backlog é a última etapa, depois do release.
