@@ -132,6 +132,16 @@ pub const Terminal = struct {
         return allocator.dupe(u8, p[0..len]) catch null;
     }
 
+    pub fn copyWorkingDirectory(self: *Terminal, allocator: std.mem.Allocator) ?[]u8 {
+        var ptr: ?[*]u8 = null;
+        var len: usize = 0;
+        if (c.cadex_terminal_copy_working_directory(self.handle, &ptr, &len) != c.CADEX_OK) return null;
+        const p = ptr orelse return null;
+        defer c.cadex_free(@ptrCast(p));
+        if (len == 0) return null;
+        return allocator.dupe(u8, p[0..len]) catch null;
+    }
+
     pub fn copyTitle(self: *Terminal, allocator: std.mem.Allocator) ?[]u8 {
         var ptr: ?[*]u8 = null;
         var len: usize = 0;

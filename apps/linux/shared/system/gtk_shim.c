@@ -1,10 +1,11 @@
 #include "gtk_shim.h"
 
 #include <gtk/gtk.h>
+#include <glib/gstdio.h>
 #include <pango/pangocairo.h>
 #include <string.h>
 
-#define CADEX_FONT "Monospace 12"
+static char cadex_font[64] = "Monospace 12";
 
 typedef struct {
     GtkWidget *area;
@@ -55,7 +56,7 @@ static void on_draw(GtkDrawingArea *area, cairo_t *cr, int width, int height, gp
     ctx.area = GTK_WIDGET(area);
     ctx.cr = cr;
     ctx.layout = gtk_widget_create_pango_layout(ctx.area, NULL);
-    ctx.normal = pango_font_description_from_string(CADEX_FONT);
+    ctx.normal = pango_font_description_from_string(cadex_font);
     pango_layout_set_font_description(ctx.layout, ctx.normal);
     ctx.bold = pango_font_description_copy(ctx.normal);
     pango_font_description_set_weight(ctx.bold, PANGO_WEIGHT_BOLD);
@@ -535,4 +536,356 @@ int cadex_open_path(const char *path) {
     int ok = g_app_info_launch_default_for_uri(uri, NULL, NULL) ? 1 : 0;
     g_free(uri);
     return ok;
+}
+
+/* ---- Shell widgets (Run 3) -------------------------------------------- */
+
+void *cadex_box_new_h(int spacing) {
+    return gtk_box_new(GTK_ORIENTATION_HORIZONTAL, spacing);
+}
+
+void *cadex_notebook_new(void) {
+    GtkWidget *notebook = gtk_notebook_new();
+    gtk_notebook_set_show_border(GTK_NOTEBOOK(notebook), FALSE);
+    gtk_notebook_set_scrollable(GTK_NOTEBOOK(notebook), TRUE);
+    return notebook;
+}
+
+void cadex_notebook_append(void *notebook, void *page, void *label) {
+    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), GTK_WIDGET(page), label ? GTK_WIDGET(label) : NULL);
+}
+
+void cadex_notebook_insert(void *notebook, int index, void *page, void *label) {
+    gtk_notebook_insert_page(GTK_NOTEBOOK(notebook), GTK_WIDGET(page), label ? GTK_WIDGET(label) : NULL, index);
+}
+
+void cadex_notebook_remove(void *notebook, int index) {
+    gtk_notebook_remove_page(GTK_NOTEBOOK(notebook), index);
+}
+
+int cadex_notebook_page_num(void *notebook, void *page) {
+    return gtk_notebook_page_num(GTK_NOTEBOOK(notebook), GTK_WIDGET(page));
+}
+
+int cadex_notebook_current(void *notebook) {
+    return gtk_notebook_get_current_page(GTK_NOTEBOOK(notebook));
+}
+
+void cadex_notebook_set_current(void *notebook, int index) {
+    gtk_notebook_set_current_page(GTK_NOTEBOOK(notebook), index);
+}
+
+int cadex_notebook_count(void *notebook) {
+    return gtk_notebook_get_n_pages(GTK_NOTEBOOK(notebook));
+}
+
+void *cadex_notebook_page(void *notebook, int index) {
+    return gtk_notebook_get_nth_page(GTK_NOTEBOOK(notebook), index);
+}
+
+typedef struct {
+    void (*fn)(void *notebook, int index, void *user);
+    void *user;
+} CadexNotebookSwitch;
+
+static void on_notebook_switch(GtkNotebook *notebook, GtkWidget *page, guint index, gpointer user) {
+    (void)page;
+    CadexNotebookSwitch *sw = user;
+    sw->fn(notebook, (int)index, sw->user);
+}
+
+void cadex_notebook_on_switch(void *notebook, void (*fn)(void *notebook, int index, void *user), void *user) {
+    CadexNotebookSwitch *sw = g_new0(CadexNotebookSwitch, 1);
+    sw->fn = fn;
+    sw->user = user;
+    g_signal_connect_data(notebook, "switch-page", G_CALLBACK(on_notebook_switch), sw, NULL, 0);
+}
+
+void *cadex_paned_new(int orientation) {
+    return gtk_paned_new(orientation ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL);
+}
+
+void cadex_paned_set_start(void *paned, void *child) {
+    gtk_paned_set_start_child(GTK_PANED(paned), child ? GTK_WIDGET(child) : NULL);
+}
+
+void cadex_paned_set_end(void *paned, void *child) {
+    gtk_paned_set_end_child(GTK_PANED(paned), child ? GTK_WIDGET(child) : NULL);
+}
+
+void cadex_paned_set_position(void *paned, int position) {
+    gtk_paned_set_position(GTK_PANED(paned), position);
+}
+
+void *cadex_stack_new(void) {
+    return gtk_stack_new();
+}
+
+void cadex_stack_add(void *stack, void *child, const char *name) {
+    gtk_stack_add_named(GTK_STACK(stack), GTK_WIDGET(child), name);
+}
+
+void cadex_stack_set(void *stack, const char *name) {
+    gtk_stack_set_visible_child_name(GTK_STACK(stack), name);
+}
+
+void *cadex_label_new(const char *text) {
+    return gtk_label_new(text);
+}
+
+void cadex_label_set(void *label, const char *text) {
+    gtk_label_set_text(GTK_LABEL(label), text);
+}
+
+void cadex_label_ellipsize(void *label) {
+    gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+}
+
+void *cadex_button_new(const char *text, void (*fn)(void *), void *user) {
+    GtkWidget *button = gtk_button_new_with_label(text);
+    CadexSimple *simple = g_new0(CadexSimple, 1);
+    simple->fn = fn;
+    simple->user = user;
+    g_signal_connect_data(button, "clicked", G_CALLBACK(on_button_clicked), simple, NULL, 0);
+    return button;
+}
+
+void cadex_text_set_font(const char *font) {
+    g_strlcpy(cadex_font, font, sizeof(cadex_font));
+}
+
+void cadex_header_widget_start(void *header, void *widget) {
+    gtk_header_bar_pack_start(GTK_HEADER_BAR(header), GTK_WIDGET(widget));
+}
+
+void cadex_header_widget_end(void *header, void *widget) {
+    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), GTK_WIDGET(widget));
+}
+
+void cadex_button_set_text(void *button, const char *text) {
+    gtk_button_set_label(GTK_BUTTON(button), text);
+}
+
+void *cadex_header_button_start(void *header, const char *text, cadex_simple_fn fn, void *user) {
+    GtkWidget *button = gtk_button_new_with_label(text);
+    CadexSimple *simple = g_new0(CadexSimple, 1);
+    simple->fn = fn;
+    simple->user = user;
+    g_signal_connect_data(button, "clicked", G_CALLBACK(on_button_clicked), simple, NULL, 0);
+    gtk_header_bar_pack_start(GTK_HEADER_BAR(header), button);
+    return button;
+}
+
+void *cadex_listbox_new(void) {
+    GtkWidget *box = gtk_list_box_new();
+    gtk_list_box_set_activate_on_single_click(GTK_LIST_BOX(box), TRUE);
+    return box;
+}
+
+void cadex_listbox_clear(void *box) {
+    GtkWidget *child = gtk_widget_get_first_child(GTK_WIDGET(box));
+    while (child) {
+        GtkWidget *next = gtk_widget_get_next_sibling(child);
+        gtk_list_box_remove(GTK_LIST_BOX(box), child);
+        child = next;
+    }
+}
+
+void cadex_listbox_append(void *box, const char *text) {
+    GtkWidget *row = gtk_list_box_row_new();
+    GtkWidget *label = gtk_label_new(text);
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+    gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), label);
+    gtk_list_box_append(GTK_LIST_BOX(box), row);
+}
+
+typedef struct {
+    void (*fn)(int index, void *user);
+    void *user;
+} CadexListActivate;
+
+static void on_row_activated(GtkListBox *box, GtkListBoxRow *row, gpointer user) {
+    (void)box;
+    CadexListActivate *activate = user;
+    activate->fn(gtk_list_box_row_get_index(row), activate->user);
+}
+
+void cadex_listbox_on_activated(void *box, void (*fn)(int index, void *user), void *user) {
+    CadexListActivate *activate = g_new0(CadexListActivate, 1);
+    activate->fn = fn;
+    activate->user = user;
+    g_signal_connect_data(box, "row-activated", G_CALLBACK(on_row_activated), activate, NULL, 0);
+}
+
+void *cadex_scrolled_new(void *child) {
+    GtkWidget *scrolled = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), child ? GTK_WIDGET(child) : NULL);
+    return scrolled;
+}
+
+void *cadex_dropdown_new(const char *const *items, int count) {
+    const char **copy = g_new0(const char *, (gsize)count + 1);
+    for (int i = 0; i < count; i++) copy[i] = items[i];
+    GtkWidget *dropdown = gtk_drop_down_new_from_strings(copy);
+    g_free(copy);
+    return dropdown;
+}
+
+int cadex_dropdown_selected(void *dropdown) {
+    guint selected = gtk_drop_down_get_selected(GTK_DROP_DOWN(dropdown));
+    if (selected == GTK_INVALID_LIST_POSITION) return -1;
+    return (int)selected;
+}
+
+void cadex_dropdown_set_selected(void *dropdown, int index) {
+    gtk_drop_down_set_selected(GTK_DROP_DOWN(dropdown), index < 0 ? GTK_INVALID_LIST_POSITION : (guint)index);
+}
+
+static void on_dropdown_changed(GObject *object, GParamSpec *pspec, gpointer user) {
+    (void)object;
+    (void)pspec;
+    CadexSimple *simple = user;
+    simple->fn(simple->user);
+}
+
+void cadex_dropdown_on_changed(void *dropdown, void (*fn)(void *user), void *user) {
+    CadexSimple *simple = g_new0(CadexSimple, 1);
+    simple->fn = fn;
+    simple->user = user;
+    g_signal_connect_data(dropdown, "notify::selected", G_CALLBACK(on_dropdown_changed), simple, NULL, 0);
+}
+
+void *cadex_spin_new(double min, double max, double step) {
+    return gtk_spin_button_new_with_range(min, max, step);
+}
+
+int cadex_spin_value(void *spin) {
+    return gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spin));
+}
+
+void cadex_spin_set_value(void *spin, int value) {
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin), (double)value);
+}
+
+static void on_spin_changed(GtkSpinButton *spin, gpointer user) {
+    (void)spin;
+    CadexSimple *simple = user;
+    simple->fn(simple->user);
+}
+
+void cadex_spin_on_changed(void *spin, void (*fn)(void *user), void *user) {
+    CadexSimple *simple = g_new0(CadexSimple, 1);
+    simple->fn = fn;
+    simple->user = user;
+    g_signal_connect_data(spin, "value-changed", G_CALLBACK(on_spin_changed), simple, NULL, 0);
+}
+
+void *cadex_switch_new(int active) {
+    GtkWidget *sw = gtk_switch_new();
+    gtk_switch_set_active(GTK_SWITCH(sw), active ? TRUE : FALSE);
+    return sw;
+}
+
+int cadex_switch_active(void *sw) {
+    return gtk_switch_get_active(GTK_SWITCH(sw)) ? 1 : 0;
+}
+
+void cadex_switch_set_active(void *sw, int active) {
+    gtk_switch_set_active(GTK_SWITCH(sw), active ? TRUE : FALSE);
+}
+
+static void on_switch_changed(GObject *object, GParamSpec *pspec, gpointer user) {
+    (void)object;
+    (void)pspec;
+    CadexSimple *simple = user;
+    simple->fn(simple->user);
+}
+
+void cadex_switch_on_changed(void *sw, void (*fn)(void *user), void *user) {
+    CadexSimple *simple = g_new0(CadexSimple, 1);
+    simple->fn = fn;
+    simple->user = user;
+    g_signal_connect_data(sw, "notify::active", G_CALLBACK(on_switch_changed), simple, NULL, 0);
+}
+
+void *cadex_window_new_dialog(void *parent, const char *title, int width, int height) {
+    GtkWidget *window = gtk_window_new();
+    gtk_window_set_title(GTK_WINDOW(window), title);
+    gtk_window_set_default_size(GTK_WINDOW(window), width, height);
+    if (parent) {
+        gtk_window_set_transient_for(GTK_WINDOW(window), GTK_WINDOW(parent));
+        gtk_window_set_destroy_with_parent(GTK_WINDOW(window), TRUE);
+        gtk_window_set_modal(GTK_WINDOW(window), TRUE);
+    }
+    return window;
+}
+
+void cadex_window_hide_on_close(void *window) {
+    gtk_window_set_hide_on_close(GTK_WINDOW(window), TRUE);
+}
+
+void cadex_window_hide(void *window) {
+    gtk_widget_set_visible(GTK_WIDGET(window), FALSE);
+}
+
+void cadex_widget_set_size(void *widget, int width, int height) {
+    gtk_widget_set_size_request(GTK_WIDGET(widget), width, height);
+}
+
+void cadex_widget_add_class(void *widget, const char *name) {
+    gtk_widget_add_css_class(GTK_WIDGET(widget), name);
+}
+
+static GtkCssProvider *cadex_css = NULL;
+
+void cadex_css_apply(const char *css) {
+    GdkDisplay *display = gdk_display_get_default();
+    if (!display) return;
+    if (cadex_css) {
+        gtk_style_context_remove_provider_for_display(display, GTK_STYLE_PROVIDER(cadex_css));
+        g_object_unref(cadex_css);
+    }
+    cadex_css = gtk_css_provider_new();
+    gtk_css_provider_load_from_string(cadex_css, css);
+    gtk_style_context_add_provider_for_display(display, GTK_STYLE_PROVIDER(cadex_css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+}
+
+void cadex_set_dark(int dark) {
+    GtkSettings *settings = gtk_settings_get_default();
+    if (settings) g_object_set(settings, "gtk-application-prefer-dark-theme", dark ? TRUE : FALSE, NULL);
+}
+
+void cadex_widget_unparent(void *widget) {
+    gtk_widget_unparent(GTK_WIDGET(widget));
+}
+
+void cadex_widget_on_escape(void *widget, void (*fn)(void *), void *user) {
+    CadexSimple *simple = g_new0(CadexSimple, 1);
+    simple->fn = fn;
+    simple->user = user;
+    GtkEventController *keys = gtk_event_controller_key_new();
+    g_signal_connect_data(keys, "key-pressed", G_CALLBACK(on_entry_key), simple, NULL, 0);
+    gtk_widget_add_controller(GTK_WIDGET(widget), keys);
+}
+
+char *cadex_read_file(const char *path, size_t *len) {
+    char *data = NULL;
+    gsize size = 0;
+    if (!g_file_get_contents(path, &data, &size, NULL)) return NULL;
+    if (len) *len = (size_t)size;
+    return data;
+}
+
+int cadex_write_file(const char *path, const char *data, size_t len) {
+    return g_file_set_contents(path, data, (gssize)len, NULL) ? 1 : 0;
+}
+
+int cadex_make_dir(const char *path) {
+    return g_mkdir_with_parents(path, 0755) == 0 ? 1 : 0;
+}
+
+void cadex_gtk_free(void *ptr) {
+    g_free(ptr);
 }
